@@ -1,0 +1,56 @@
+BINS = dwlb
+
+PREFIX ?= /usr/local
+CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -g
+
+all: $(BINS)
+
+clean:
+	$(RM) $(BINS) $(addsuffix .o,$(BINS))
+
+install: all
+	install -D -t $(PREFIX)/bin $(BINS)
+
+WAYLAND_PROTOCOLS=$(shell pkg-config --variable=pkgdatadir wayland-protocols)
+WAYLAND_SCANNER=$(shell pkg-config --variable=wayland_scanner wayland-scanner)
+
+xdg-shell-protocol.h:
+	$(WAYLAND_SCANNER) client-header \
+		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
+
+xdg-shell-protocol.c:
+	$(WAYLAND_SCANNER) private-code \
+		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
+
+xdg-shell-protocol.o: xdg-shell-protocol.h
+
+xdg-output-protocol.h:
+	$(WAYLAND_SCANNER) client-header \
+		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
+
+xdg-output-protocol.c:
+	$(WAYLAND_SCANNER) private-code \
+		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
+
+xdg-output-protocol.o: xdg-output-protocol.h
+
+wlr-layer-shell-unstable-v1-protocol.h:
+	$(WAYLAND_SCANNER) client-header \
+		protocols/wlr-layer-shell-unstable-v1.xml $@
+
+wlr-layer-shell-unstable-v1-protocol.c:
+	$(WAYLAND_SCANNER) private-code \
+		protocols/wlr-layer-shell-unstable-v1.xml $@
+
+wlr-layer-shell-unstable-v1-protocol.o: wlr-layer-shell-unstable-v1-protocol.h
+
+dwlb.o: utf8.h xdg-shell-protocol.h xdg-output-protocol.h wlr-layer-shell-unstable-v1-protocol.h
+
+# Protocol dependencies
+dwlb: xdg-shell-protocol.o xdg-output-protocol.o wlr-layer-shell-unstable-v1-protocol.o
+
+# Library dependencies
+dwlb: CFLAGS+=$(shell pkg-config --cflags wayland-client fcft pixman-1)
+dwlb: LDLIBS+=$(shell pkg-config --libs wayland-client fcft pixman-1) -lrt
+
+.PHONY: all clean install
