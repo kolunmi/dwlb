@@ -239,7 +239,7 @@ draw_text(char *text,
 	if (!*text || !surface_width || xpos >= surface_width)
 		return xpos;
 	
-	if ((nxpos = xpos + padding) >= surface_width)
+	if ((nxpos = xpos + padding) > surface_width)
 		return xpos;
 	xpos = nxpos;
 	
@@ -284,11 +284,8 @@ draw_text(char *text,
 		long x_kern = 0;
 		if (lastcp)
 			fcft_kerning(font, lastcp, codepoint, &x_kern, NULL);
-		if ((nxpos = xpos + x_kern + glyph->advance.x) >= surface_width) {
-			if (!lastcp)
-				return ixpos;
+		if ((nxpos = xpos + x_kern + glyph->advance.x) > surface_width)
 			break;
-		}
 		xpos += x_kern;
 		lastcp = codepoint;
 
@@ -326,7 +323,7 @@ draw_text(char *text,
 	if (state != UTF8_ACCEPT)
 		fprintf(stderr, "malformed UTF-8 sequence\n");
 
-	nxpos = MIN(xpos + padding, surface_width - 1);
+	nxpos = MIN(xpos + padding, surface_width);
 
 	if (background && bgcolor)
 		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
@@ -783,10 +780,8 @@ event_loop(void)
 }
 
 static void
-client_send_command(struct sockaddr_un *sock_address,
-		    const char *output,
-		    const char *cmd,
-		    const char *data)
+client_send_command(struct sockaddr_un *sock_address, const char *output,
+		    const char *cmd, const char *data)
 {
 	DIR *dir;
 	if (!(dir = opendir(socketdir)))
