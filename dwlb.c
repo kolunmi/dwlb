@@ -86,7 +86,7 @@ struct Bar {
 	int selmon;
 	char *layout;
 	char *title;
-	char status[256];
+	char status[512];
 
 	bool redraw;
 
@@ -96,7 +96,7 @@ struct Bar {
 static int sock_fd;
 static char socketdir[256];
 static char *socketpath = NULL;
-static char sockbuf[512];
+static char sockbuf[768];
 static char stdinbuf[BUFSIZ];
 
 static struct wl_display *display;
@@ -158,19 +158,24 @@ draw_text(char *text,
 	  pixman_image_t *background,
 	  pixman_color_t *fgcolor,
 	  pixman_color_t *bgcolor,
+	  uint32_t max_x,
 	  uint32_t height,
 	  uint32_t padding)
 {
 	uint32_t codepoint;
 	uint32_t state = UTF8_ACCEPT;
 	uint32_t ixpos = xpos;
+	uint32_t nxpos;
 	uint32_t lastcp = 0;
 	pixman_image_t *fgfill = pixman_image_create_solid_fill(fgcolor);
 	
 	if (!*text)
-		return 0;
+		return xpos;
+
+	if ((nxpos = xpos + padding) > max_x)
+		return xpos;
 	
-	xpos += padding;
+	xpos = nxpos;
 	
 	for (char *p = text; *p; p++) {
 		/* Returns nonzero if more bytes are needed */
@@ -187,6 +192,13 @@ draw_text(char *text,
 		long x_kern = 0;
 		if (lastcp)
 			fcft_kerning(font, lastcp, codepoint, &x_kern, NULL);
+
+		if ((nxpos = xpos + x_kern + glyph->advance.x) > max_x) {
+			if (!lastcp)
+				return ixpos;
+			break;
+		}
+		
 		xpos += x_kern;
 		lastcp = codepoint;
 
@@ -208,14 +220,14 @@ draw_text(char *text,
 		}
 
 		/* increment pen position */
-		xpos += glyph->advance.x;
+		xpos = nxpos;
 		ypos += glyph->advance.y;
 	}
 
 	if (state != UTF8_ACCEPT)
 		fprintf(stderr, "malformed UTF-8 sequence\n");
-	
-	xpos += padding;
+
+	xpos = MIN(xpos + padding, max_x);
 
 	if (background && bgcolor)
 		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
@@ -292,22 +304,22 @@ draw_frame(Bar *b)
 		
 		if (urgent)
 			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &urgtextcolor, &urgbgcolor, b->height, b->textpadding);
+					      &urgtextcolor, &urgbgcolor, b->width, b->height, b->textpadding);
 		else
 			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &textcolor, active ? &activecolor : &inactivecolor, b->height, b->textpadding);
+					      &textcolor, active ? &activecolor : &inactivecolor, b->width, b->height, b->textpadding);
 	}
 	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground_left, background_left,
-			      &textcolor, &inactivecolor, b->height, b->textpadding);
+			      &textcolor, &inactivecolor, b->width, b->height, b->textpadding);
 
 	xpos_right = draw_text(b->status, 0, ypos, foreground_right, background_right,
-			       &textcolor, &inactivecolor, b->height, b->textpadding);
+			       &textcolor, &inactivecolor, b->width, b->height, b->textpadding);
 	if (xpos_right > b->width)
 		xpos_right = b->width;
 	
 	draw_text(b->title, 0, ypos, foreground_title, NULL,
-		  &textcolor, NULL, b->height, b->textpadding);
-	
+		  &textcolor, NULL, b->width, b->height, b->textpadding);
+
 	/* Draw background and foreground on bar */
 	pixman_image_composite32(PIXMAN_OP_OVER, foreground_title, NULL, bar, 0, 0, 0, 0, xpos_left, 0, b->width, b->height);
 	pixman_image_composite32(PIXMAN_OP_OVER, background_right, NULL, bar, 0, 0, 0, 0, b->width - xpos_right, 0, b->width, b->height);
