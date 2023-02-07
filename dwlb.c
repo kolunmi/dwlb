@@ -193,19 +193,17 @@ handle_cmd(char *cmd, pixman_color_t *fg, pixman_color_t *bg,
 
 	if (!strcmp(cmd, "bg")) {
 		if (bg && def_bg) {
-			if (!*arg) {
+			if (!*arg)
 				*bg = *def_bg;
-			} else if (parse_color(arg, bg)) {
+			else if (parse_color(arg, bg))
 				fprintf(stderr, "Bad color string \"%s\"\n", arg);
-			}
 		}
 	} else if (!strcmp(cmd, "fg")) {
 		if (fg && def_fg) {
-			if (!*arg) {
+			if (!*arg)
 				*fg = *def_fg;
-			} else if (parse_color(arg, fg)) {
+			else if (parse_color(arg, fg))
 				fprintf(stderr, "Bad color string \"%s\"\n", arg);
-			}
 		}
 	} else {
 		fprintf(stderr, "Unrecognized command \"%s\"\n", cmd);
@@ -475,7 +473,7 @@ cleanup(void)
 		unlink(socketpath);
 }
 
-static struct zwlr_layer_surface_v1_listener layer_surface_listener = {
+static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
 	.configure = layer_surface_configure,
 	.closed = layer_surface_closed,
 };
@@ -515,7 +513,7 @@ output_description(void *data, struct zxdg_output_v1 *xdg_output,
 {
 }
 
-static struct zxdg_output_v1_listener output_listener = {
+static const struct zxdg_output_v1_listener output_listener = {
 	.name = output_name,
 	.description = output_description,
 	.done = output_done,
@@ -605,7 +603,6 @@ handle_global_remove(void *data, struct wl_registry *registry, uint32_t name)
 	DL_DELETE(bars, b);
 	teardown_bar(b);
 }
-
 
 static const struct wl_registry_listener registry_listener = {
 	.global = handle_global,
@@ -937,7 +934,6 @@ main(int argc, char **argv)
 	signal(SIGINT, sig_handler);
 	signal(SIGHUP, sig_handler);
 	signal(SIGTERM, sig_handler);
-	signal(SIGPIPE, SIG_IGN);
 
 	/* Run */
 	ready = true;
