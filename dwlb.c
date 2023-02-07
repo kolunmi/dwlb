@@ -150,6 +150,73 @@ allocate_shm_file(size_t size)
 	return fd;
 }
 
+/* Color parsing logic adapted from [sway] */
+static int
+parse_color(const char *str, pixman_color_t *clr)
+{
+	if (*str == '#')
+		str++;
+	int len = strlen(str);
+
+	// Disallows "0x" prefix that strtoul would ignore
+	if ((len != 6 && len != 8) || !isxdigit(str[0]) || !isxdigit(str[1]))
+		return -1;
+
+	char *ptr;
+	uint32_t parsed = strtoul(str, &ptr, 16);
+	if (*ptr)
+		return -1;
+
+	if (len == 8) {
+		clr->alpha = (parsed & 0xff) * 0x101;
+		parsed >>= 8;
+	} else {
+		clr->alpha = 0xffff;
+	}
+	clr->red =   ((parsed >> 16) & 0xff) * 0x101;
+	clr->green = ((parsed >>  8) & 0xff) * 0x101;
+	clr->blue =  ((parsed >>  0) & 0xff) * 0x101;
+	return 0;
+}
+
+static char *
+handle_cmd(char *cmd, pixman_color_t *fg, pixman_color_t *bg,
+	   pixman_color_t *def_fg, pixman_color_t *def_bg)
+{
+	char *arg, *end;
+
+	if (!(arg = strchr(cmd, '(')) || !(end = strchr(arg + 1, ')')))
+		return cmd;
+
+	*arg++ = '\0';
+	*end = '\0';
+
+	if (!strcmp(cmd, "bg")) {
+		if (bg && def_bg) {
+			if (!*arg) {
+				*bg = *def_bg;
+			} else if (parse_color(arg, bg)) {
+				fprintf(stderr, "Bad color string \"%s\"\n", arg);
+			}
+		}
+	} else if (!strcmp(cmd, "fg")) {
+		if (fg && def_fg) {
+			if (!*arg) {
+				*fg = *def_fg;
+			} else if (parse_color(arg, fg)) {
+				fprintf(stderr, "Bad color string \"%s\"\n", arg);
+			}
+		}
+	} else {
+		fprintf(stderr, "Unrecognized command \"%s\"\n", cmd);
+	}
+
+	/* Restore string for later redraws */
+	*--arg = '(';
+	*end = ')';
+	return end;
+}
+
 static uint32_t
 draw_text(char *text,
 	  uint32_t xpos,
@@ -158,26 +225,51 @@ draw_text(char *text,
 	  pixman_image_t *background,
 	  pixman_color_t *fgcolor,
 	  pixman_color_t *bgcolor,
-	  uint32_t max_x,
+	  uint32_t surface_width,
 	  uint32_t height,
-	  uint32_t padding)
+	  uint32_t padding,
+	  bool commands)
 {
 	uint32_t codepoint;
 	uint32_t state = UTF8_ACCEPT;
 	uint32_t ixpos = xpos;
 	uint32_t nxpos;
 	uint32_t lastcp = 0;
-	pixman_image_t *fgfill = pixman_image_create_solid_fill(fgcolor);
-	
-	if (!*text)
-		return xpos;
 
-	if ((nxpos = xpos + padding) > max_x)
+	if (!*text || !surface_width || xpos >= surface_width)
 		return xpos;
 	
+	if ((nxpos = xpos + padding) >= surface_width)
+		return xpos;
 	xpos = nxpos;
 	
+	pixman_color_t cur_fgcolor = *fgcolor;
+	pixman_color_t cur_bgcolor;
+	if (background && bgcolor) {
+		cur_bgcolor = *bgcolor;
+		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
+					&cur_bgcolor, 1, &(pixman_box32_t){
+						.x1 = ixpos,
+						.x2 = xpos,
+						.y1 = 0,
+						.y2 = height
+					});
+	}
+	
+	pixman_image_t *fgfill = pixman_image_create_solid_fill(fgcolor);
+
 	for (char *p = text; *p; p++) {
+		/* Check for inline ^ commands */
+		if (commands && state == UTF8_ACCEPT && *p == '^') {
+			p++;
+			if (*p != '^') {
+				p = handle_cmd(p, &cur_fgcolor, &cur_bgcolor, fgcolor, bgcolor);
+				pixman_image_unref(fgfill);
+				fgfill = pixman_image_create_solid_fill(&cur_fgcolor);
+				continue;
+			}
+		}
+
 		/* Returns nonzero if more bytes are needed */
 		if (utf8decode(&state, &codepoint, *p))
 			continue;
@@ -192,13 +284,11 @@ draw_text(char *text,
 		long x_kern = 0;
 		if (lastcp)
 			fcft_kerning(font, lastcp, codepoint, &x_kern, NULL);
-
-		if ((nxpos = xpos + x_kern + glyph->advance.x) > max_x) {
+		if ((nxpos = xpos + x_kern + glyph->advance.x) >= surface_width) {
 			if (!lastcp)
 				return ixpos;
 			break;
 		}
-		
 		xpos += x_kern;
 		lastcp = codepoint;
 
@@ -219,6 +309,15 @@ draw_text(char *text,
 				xpos + glyph->x, ypos - glyph->y, glyph->width, glyph->height);
 		}
 
+		if (background && bgcolor)
+			pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
+						&cur_bgcolor, 1, &(pixman_box32_t){
+							.x1 = xpos,
+							.x2 = nxpos,
+							.y1 = 0,
+							.y2 = height
+						});
+		
 		/* increment pen position */
 		xpos = nxpos;
 		ypos += glyph->advance.y;
@@ -227,17 +326,18 @@ draw_text(char *text,
 	if (state != UTF8_ACCEPT)
 		fprintf(stderr, "malformed UTF-8 sequence\n");
 
-	xpos = MIN(xpos + padding, max_x);
+	nxpos = MIN(xpos + padding, surface_width - 1);
 
 	if (background && bgcolor)
 		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
 					bgcolor, 1, &(pixman_box32_t){
-						.x1 = ixpos,
-						.x2 = xpos,
+						.x1 = xpos,
+						.x2 = nxpos,
 						.y1 = 0,
 						.y2 = height
 					});
-
+	xpos = nxpos;
+	
 	pixman_image_unref(fgfill);
 
 	return xpos;
@@ -304,21 +404,21 @@ draw_frame(Bar *b)
 		
 		if (urgent)
 			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &urgtextcolor, &urgbgcolor, b->width, b->height, b->textpadding);
+					      &urgtextcolor, &urgbgcolor, b->width, b->height, b->textpadding, false);
 		else
 			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &textcolor, active ? &activecolor : &inactivecolor, b->width, b->height, b->textpadding);
+					      &textcolor, active ? &activecolor : &inactivecolor, b->width, b->height, b->textpadding, false);
 	}
 	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground_left, background_left,
-			      &textcolor, &inactivecolor, b->width, b->height, b->textpadding);
+			      &textcolor, &inactivecolor, b->width, b->height, b->textpadding, false);
 
 	xpos_right = draw_text(b->status, 0, ypos, foreground_right, background_right,
-			       &textcolor, &inactivecolor, b->width, b->height, b->textpadding);
+			       &textcolor, &inactivecolor, b->width, b->height, b->textpadding, true);
 	if (xpos_right > b->width)
 		xpos_right = b->width;
 	
 	draw_text(b->title, 0, ypos, foreground_title, NULL,
-		  &textcolor, NULL, b->width, b->height, b->textpadding);
+		  &textcolor, NULL, b->width, b->height, b->textpadding, false);
 
 	/* Draw background and foreground on bar */
 	pixman_image_composite32(PIXMAN_OP_OVER, foreground_title, NULL, bar, 0, 0, 0, 0, xpos_left, 0, b->width, b->height);
@@ -720,35 +820,6 @@ client_send_command(struct sockaddr_un *sock_address,
 	}
 			
 	closedir(dir);
-}
-
-/* Color parsing logic adapted from [sway] */
-static int
-parse_color(const char *str, pixman_color_t *clr)
-{
-	if (*str == '#')
-		str++;
-	int len = strlen(str);
-
-	// Disallows "0x" prefix that strtoul would ignore
-	if ((len != 6 && len != 8) || !isxdigit(str[0]) || !isxdigit(str[1]))
-		return -1;
-
-	char *ptr;
-	uint32_t parsed = strtoul(str, &ptr, 16);
-	if (*ptr)
-		return -1;
-
-	if (len == 8) {
-		clr->alpha = (parsed & 0xff) * 0x101;
-		parsed >>= 8;
-	} else {
-		clr->alpha = 0xffff;
-	}
-	clr->red =   ((parsed >> 16) & 0xff) * 0x101;
-	clr->green = ((parsed >>  8) & 0xff) * 0x101;
-	clr->blue =  ((parsed >>  0) & 0xff) * 0x101;
-	return 0;
 }
 
 void
