@@ -19,9 +19,9 @@
 #include <wayland-client.h>
 
 #include "utf8.h"
-#include "wlr-layer-shell-unstable-v1-protocol.h"
 #include "xdg-shell-protocol.h"
-#include "xdg-output-protocol.h"
+#include "xdg-output-unstable-v1-protocol.h"
+#include "wlr-layer-shell-unstable-v1-protocol.h"
 
 #define DIE(fmt, ...)						\
 	do {							\

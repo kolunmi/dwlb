@@ -24,15 +24,15 @@ xdg-shell-protocol.c:
 
 xdg-shell-protocol.o: xdg-shell-protocol.h
 
-xdg-output-protocol.h:
+xdg-output-unstable-v1-protocol.h:
 	$(WAYLAND_SCANNER) client-header \
 		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
 
-xdg-output-protocol.c:
+xdg-output-unstable-v1-protocol.c:
 	$(WAYLAND_SCANNER) private-code \
 		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
 
-xdg-output-protocol.o: xdg-output-protocol.h
+xdg-output-unstable-v1-protocol.o: xdg-output-unstable-v1-protocol.h
 
 wlr-layer-shell-unstable-v1-protocol.h:
 	$(WAYLAND_SCANNER) client-header \
@@ -44,10 +44,10 @@ wlr-layer-shell-unstable-v1-protocol.c:
 
 wlr-layer-shell-unstable-v1-protocol.o: wlr-layer-shell-unstable-v1-protocol.h
 
-dwlb.o: utf8.h xdg-shell-protocol.h xdg-output-protocol.h wlr-layer-shell-unstable-v1-protocol.h
+dwlb.o: utf8.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h
 
 # Protocol dependencies
-dwlb: xdg-shell-protocol.o xdg-output-protocol.o wlr-layer-shell-unstable-v1-protocol.o
+dwlb: xdg-shell-protocol.o xdg-output-unstable-v1-protocol.o wlr-layer-shell-unstable-v1-protocol.o
 
 # Library dependencies
 dwlb: CFLAGS+=$(shell pkg-config --cflags wayland-client fcft pixman-1)
