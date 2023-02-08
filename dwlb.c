@@ -51,7 +51,7 @@
 
 #define PROGRAM "dwlb"
 #define VERSION "0.1"
-#define USAGE \
+#define USAGE								\
 	"usage: dwlb [OPTIONS]\n"					\
 	"	-status	[OUTPUT] [TEXT]		send status text to dwlb\n" \
 	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
@@ -61,6 +61,7 @@
 	"	-inactive-color [COLOR]		specify color to indicate inactive tags or monitors\n" \
 	"	-urg-text-color [COLOR]		specify text color on urgent tags\n" \
 	"	-urg-bg-color [COLOR]		specify color of urgent tags\n"	\
+	"	-tags [TAG 1]...[TAG 9]		specify tag text\n"	\
 	"	-v				get version information\n" \
 	"	-h				view this help text\n"
 
@@ -113,7 +114,9 @@ static bool ready = false;
 static bool hide_vacant = false;
 static Bar *bars = NULL;
 
-static char *tags[9] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+#define TAGSLEN 9
+static char *tags[TAGSLEN] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+
 static struct fcft_font *font;
 static pixman_color_t activecolor = { .red = 0x0000, .green = 0x5555, .blue = 0x7777, .alpha = 0xffff, };
 static pixman_color_t inactivecolor = { .red = 0x2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
@@ -380,7 +383,7 @@ draw_frame(Bar *b)
 	uint32_t boxs = font->height / 9;
 	uint32_t boxw = font->height / 6 + 2;
 
-	for (uint32_t i = 0; i < 9; i++) {
+	for (uint32_t i = 0; i < TAGSLEN; i++) {
 		bool active = b->mtags & 1 << i;
 		bool occupied = b->ctags & 1 << i;
 		bool urgent = b->urg & 1 << i;
@@ -404,13 +407,12 @@ draw_frame(Bar *b)
 			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
 					      &textcolor, active ? &activecolor : &inactivecolor, b->width, b->height, b->textpadding, false);
 	}
+	
 	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground_left, background_left,
 			      &textcolor, &inactivecolor, b->width, b->height, b->textpadding, false);
 
 	xpos_right = draw_text(b->status, 0, ypos, foreground_right, background_right,
 			       &textcolor, &inactivecolor, b->width, b->height, b->textpadding, true);
-	if (xpos_right > b->width)
-		xpos_right = b->width;
 	
 	draw_text(b->title, 0, ypos, foreground_title, NULL,
 		  &textcolor, NULL, b->width, b->height, b->textpadding, false);
@@ -466,17 +468,17 @@ layer_surface_closed(void *data, struct zwlr_layer_surface_v1 *surface)
 	run_display = false;
 }
 
+static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
+	.configure = layer_surface_configure,
+	.closed = layer_surface_closed,
+};
+
 static void
 cleanup(void)
 {
 	if (socketpath)
 		unlink(socketpath);
 }
-
-static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
-	.configure = layer_surface_configure,
-	.closed = layer_surface_closed,
-};
 
 static void
 output_name(void *data, struct zxdg_output_v1 *xdg_output, const char *name)
@@ -875,6 +877,12 @@ main(int argc, char **argv)
 				DIE("Option -urg-bg-color requires an argument");
 			if (parse_color(argv[i], &urgbgcolor) == -1)
 				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-tags")) {
+			if (i + TAGSLEN >= argc)
+				DIE("Option -tags requires %i arguments", TAGSLEN);
+			for (int j = 0; j < TAGSLEN; j++)
+				tags[j] = argv[i + 1 + j];
+			i += TAGSLEN;
 		} else if (!strcmp(argv[i], "-v")) {
 			fprintf(stderr, PROGRAM " " VERSION "\n");
 			return 0;
