@@ -226,47 +226,48 @@ draw_text(char *text,
 	  pixman_image_t *background,
 	  pixman_color_t *fgcolor,
 	  pixman_color_t *bgcolor,
-	  uint32_t surface_width,
-	  uint32_t height,
+	  uint32_t maxxpos,
+	  uint32_t bufheight,
 	  uint32_t padding,
 	  bool commands)
 {
-	uint32_t codepoint;
-	uint32_t state = UTF8_ACCEPT;
+	if (!*text || !maxxpos)
+		return xpos;
+
 	uint32_t ixpos = xpos;
 	uint32_t nxpos;
-	uint32_t lastcp = 0;
 
-	if (!*text || !surface_width || xpos >= surface_width)
-		return xpos;
-	
-	if ((nxpos = xpos + padding) > surface_width)
+	if ((nxpos = xpos + padding) + padding >= maxxpos)
 		return xpos;
 	xpos = nxpos;
-	
-	pixman_color_t cur_fgcolor = *fgcolor;
-	pixman_color_t cur_bgcolor;
-	if (background && bgcolor) {
-		cur_bgcolor = *bgcolor;
-		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
-					&cur_bgcolor, 1, &(pixman_box32_t){
-						.x1 = ixpos,
-						.x2 = xpos,
-						.y1 = 0,
-						.y2 = height
-					});
-	}
-	
-	pixman_image_t *fgfill = pixman_image_create_solid_fill(fgcolor);
 
+	bool drawfg = foreground && fgcolor;
+	bool drawbg = background && bgcolor;
+	
+	pixman_image_t *fgfill;
+	pixman_color_t cur_fgcolor;
+	pixman_color_t cur_bgcolor;
+	if (drawfg) {
+		fgfill = pixman_image_create_solid_fill(fgcolor);
+		cur_fgcolor = *fgcolor;
+	}
+	if (drawbg)
+		cur_bgcolor = *bgcolor;
+
+	uint32_t codepoint;
+	uint32_t state = UTF8_ACCEPT;
+	uint32_t lastcp = 0;
+	
 	for (char *p = text; *p; p++) {
-		/* Check for inline ^ commands */
+		/* If commands are enabled, check for inline ^ commands */
 		if (commands && state == UTF8_ACCEPT && *p == '^') {
 			p++;
 			if (*p != '^') {
 				p = handle_cmd(p, &cur_fgcolor, &cur_bgcolor, fgcolor, bgcolor);
-				pixman_image_unref(fgfill);
-				fgfill = pixman_image_create_solid_fill(&cur_fgcolor);
+				if (drawfg) {
+					pixman_image_unref(fgfill);
+					fgfill = pixman_image_create_solid_fill(&cur_fgcolor);
+				}
 				continue;
 			}
 		}
@@ -285,61 +286,69 @@ draw_text(char *text,
 		long x_kern = 0;
 		if (lastcp)
 			fcft_kerning(font, lastcp, codepoint, &x_kern, NULL);
-		if ((nxpos = xpos + x_kern + glyph->advance.x) > surface_width)
+		if ((nxpos = xpos + x_kern + glyph->advance.x) + padding > maxxpos)
 			break;
-		xpos += x_kern;
 		lastcp = codepoint;
+		xpos += x_kern;
 
-		/* Detect and handle pre-rendered glyphs (e.g. emoji) */
-		if (pixman_image_get_format(glyph->pix) == PIXMAN_a8r8g8b8) {
-			/* Only the alpha channel of the mask is used, so we can
-			 * use fgfill here to blend prerendered glyphs with the
-			 * same opacity */
-			pixman_image_composite32(
-				PIXMAN_OP_OVER, glyph->pix, fgfill, foreground, 0, 0, 0, 0,
-				xpos + glyph->x, ypos - glyph->y, glyph->width, glyph->height);
-		} else {
-			/* Applying the foreground color here would mess up
-			 * component alphas for subpixel-rendered text, so we
-			 * apply it when blending. */
-			pixman_image_composite32(
-				PIXMAN_OP_OVER, fgfill, glyph->pix, foreground, 0, 0, 0, 0,
-				xpos + glyph->x, ypos - glyph->y, glyph->width, glyph->height);
+		if (drawfg) {
+			/* Detect and handle pre-rendered glyphs (e.g. emoji) */
+			if (pixman_image_get_format(glyph->pix) == PIXMAN_a8r8g8b8) {
+				/* Only the alpha channel of the mask is used, so we can
+				 * use fgfill here to blend prerendered glyphs with the
+				 * same opacity */
+				pixman_image_composite32(
+					PIXMAN_OP_OVER, glyph->pix, fgfill, foreground, 0, 0, 0, 0,
+					xpos + glyph->x, ypos - glyph->y, glyph->width, glyph->height);
+			} else {
+				/* Applying the foreground color here would mess up
+				 * component alphas for subpixel-rendered text, so we
+				 * apply it when blending. */
+				pixman_image_composite32(
+					PIXMAN_OP_OVER, fgfill, glyph->pix, foreground, 0, 0, 0, 0,
+					xpos + glyph->x, ypos - glyph->y, glyph->width, glyph->height);
+			}
 		}
-
-		if (background && bgcolor)
+		
+		if (drawbg)
 			pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
 						&cur_bgcolor, 1, &(pixman_box32_t){
-							.x1 = xpos,
-							.x2 = nxpos,
-							.y1 = 0,
-							.y2 = height
+							.x1 = xpos, .x2 = nxpos,
+							.y1 = 0, .y2 = bufheight
 						});
 		
 		/* increment pen position */
 		xpos = nxpos;
 		ypos += glyph->advance.y;
 	}
+	if (drawfg)
+		pixman_image_unref(fgfill);
 
+	if (!lastcp)
+		return ixpos;
 	if (state != UTF8_ACCEPT)
 		fprintf(stderr, "malformed UTF-8 sequence\n");
-
-	nxpos = MIN(xpos + padding, surface_width);
-
-	if (background && bgcolor)
+	
+	nxpos = xpos + padding;
+	if (drawbg) {
+		/* Fill padding background */
+		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
+					&cur_bgcolor, 1, &(pixman_box32_t){
+						.x1 = ixpos, .x2 = ixpos + padding,
+						.y1 = 0, .y2 = bufheight
+					});
 		pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
 					bgcolor, 1, &(pixman_box32_t){
-						.x1 = xpos,
-						.x2 = nxpos,
-						.y1 = 0,
-						.y2 = height
+						.x1 = xpos, .x2 = nxpos,
+						.y1 = 0, .y2 = bufheight
 					});
-	xpos = nxpos;
+	}
 	
-	pixman_image_unref(fgfill);
-
-	return xpos;
+	return nxpos;
 }
+
+#define TEXT_WIDTH(text, maxxpos, padding, commands)	\
+	draw_text(text, 0, 0, NULL, NULL, NULL, NULL, maxxpos, 0, padding, commands)
 
 static int
 draw_frame(Bar *b)
@@ -364,22 +373,14 @@ draw_frame(Bar *b)
 	/* Pixman image corresponding to main buffer */
 	pixman_image_t *bar = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, data, b->width * 4);
 	
-	/* Fill bar with background color */
-	pixman_image_fill_boxes(PIXMAN_OP_SRC, bar, b->selmon ? &activecolor : &inactivecolor, 1,
-				&(pixman_box32_t) {.x1 = 0, .x2 = b->width, .y1 = 0, .y2 = b->height});
-	
 	/* Text background and foreground layers */
-	pixman_image_t *background_left = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
-	pixman_image_t *foreground_left = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
-	pixman_image_t *background_right = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
-	pixman_image_t *foreground_right = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
-	pixman_image_t *foreground_title = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
+	pixman_image_t *foreground = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
+	pixman_image_t *background = pixman_image_create_bits(PIXMAN_a8r8g8b8, b->width, b->height, NULL, b->width * 4);
 	
 	/* Draw on images */
 	uint32_t xpos_left = 0;
-	uint32_t xpos_right;
 	uint32_t ypos = (b->height + font->ascent - font->descent) / 2;
-	
+
 	uint32_t boxs = font->height / 9;
 	uint32_t boxw = font->height / 6 + 2;
 
@@ -392,43 +393,44 @@ draw_frame(Bar *b)
 			continue;
 		
 		if (!hide_vacant && occupied)
-			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground_left,
+			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
 						&textcolor, 1, &(pixman_box32_t){
-							.x1 = xpos_left + boxs,
-							.x2 = xpos_left + boxs + boxw,
-							.y1 = boxs,
-							.y2 = boxs + boxw
+							.x1 = xpos_left + boxs, .x2 = xpos_left + boxs + boxw,
+							.y1 = boxs, .y2 = boxs + boxw
 						});
 		
 		if (urgent)
-			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &urgtextcolor, &urgbgcolor, b->width, b->height, b->textpadding, false);
+			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground, background, &urgtextcolor,
+					      &urgbgcolor, b->width, b->height, b->textpadding, false);
 		else
-			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground_left, background_left,
-					      &textcolor, active ? &activecolor : &inactivecolor, b->width, b->height, b->textpadding, false);
+			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground, background, &textcolor,
+					      active ? &activecolor : &inactivecolor, b->width, b->height,
+					      b->textpadding, false);
 	}
 	
-	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground_left, background_left,
-			      &textcolor, &inactivecolor, b->width, b->height, b->textpadding, false);
+	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground, background, &textcolor,
+			      &inactivecolor, b->width, b->height, b->textpadding, false);
 
-	xpos_right = draw_text(b->status, 0, ypos, foreground_right, background_right,
-			       &textcolor, &inactivecolor, b->width, b->height, b->textpadding, true);
-	
-	draw_text(b->title, 0, ypos, foreground_title, NULL,
-		  &textcolor, NULL, b->width, b->height, b->textpadding, false);
+	uint32_t status_width = TEXT_WIDTH(b->status, b->width - xpos_left, b->textpadding, true);
+	draw_text(b->status, b->width - status_width, ypos, foreground, background, &textcolor,
+		  &inactivecolor, b->width, b->height, b->textpadding, true);
+
+	xpos_left = draw_text(b->title, xpos_left, ypos, foreground, background, &textcolor,
+			      b->selmon ? &activecolor : &inactivecolor, b->width - status_width,
+			      b->height, b->textpadding, false);
+
+	pixman_image_fill_boxes(PIXMAN_OP_SRC, bar, b->selmon ? &activecolor : &inactivecolor, 1,
+				&(pixman_box32_t){
+					.x1 = xpos_left, .x2 = b->width - status_width,
+					.y1 = 0, .y2 = b->height
+				});
 
 	/* Draw background and foreground on bar */
-	pixman_image_composite32(PIXMAN_OP_OVER, foreground_title, NULL, bar, 0, 0, 0, 0, xpos_left, 0, b->width, b->height);
-	pixman_image_composite32(PIXMAN_OP_OVER, background_right, NULL, bar, 0, 0, 0, 0, b->width - xpos_right, 0, b->width, b->height);
-	pixman_image_composite32(PIXMAN_OP_OVER, foreground_right, NULL, bar, 0, 0, 0, 0, b->width - xpos_right, 0, b->width, b->height);
-	pixman_image_composite32(PIXMAN_OP_OVER, background_left, NULL, bar, 0, 0, 0, 0, 0, 0, b->width, b->height);
-	pixman_image_composite32(PIXMAN_OP_OVER, foreground_left, NULL, bar, 0, 0, 0, 0, 0, 0, b->width, b->height);
+	pixman_image_composite32(PIXMAN_OP_OVER, background, NULL, bar, 0, 0, 0, 0, 0, 0, b->width, b->height);
+	pixman_image_composite32(PIXMAN_OP_OVER, foreground, NULL, bar, 0, 0, 0, 0, 0, 0, b->width, b->height);
 
-	pixman_image_unref(foreground_left);
-	pixman_image_unref(background_left);
-	pixman_image_unref(foreground_right);
-	pixman_image_unref(background_right);
-	pixman_image_unref(foreground_title);
+	pixman_image_unref(foreground);
+	pixman_image_unref(background);
 	pixman_image_unref(bar);
 	
 	munmap(data, b->bufsize);
@@ -517,10 +519,10 @@ output_description(void *data, struct zxdg_output_v1 *xdg_output,
 
 static const struct zxdg_output_v1_listener output_listener = {
 	.name = output_name,
-	.description = output_description,
-	.done = output_done,
 	.logical_position = output_logical_position,
-	.logical_size = output_logical_size
+	.logical_size = output_logical_size,
+	.done = output_done,
+	.description = output_description
 };
 
 static void
