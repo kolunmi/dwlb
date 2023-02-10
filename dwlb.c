@@ -84,9 +84,9 @@ struct Bar {
 	uint32_t mtags;
 	uint32_t ctags;
 	uint32_t urg;
-	int selmon;
-	char *layout;
-	char *title;
+	uint32_t selmon;
+	char layout[32];
+	char title[512];
 	char status[512];
 
 	bool redraw;
@@ -98,7 +98,8 @@ static int sock_fd;
 static char socketdir[256];
 static char *socketpath = NULL;
 static char sockbuf[768];
-static char stdinbuf[BUFSIZ];
+static char *stdinbuf;
+static size_t stdinbuf_cap;
 
 static struct wl_display *display;
 static struct wl_compositor *compositor;
@@ -198,18 +199,16 @@ handle_cmd(char *cmd, pixman_color_t *fg, pixman_color_t *bg,
 		if (bg && def_bg) {
 			if (!*arg)
 				*bg = *def_bg;
-			else if (parse_color(arg, bg))
-				fprintf(stderr, "Bad color string \"%s\"\n", arg);
+			else
+				parse_color(arg, bg);
 		}
 	} else if (!strcmp(cmd, "fg")) {
 		if (fg && def_fg) {
 			if (!*arg)
 				*fg = *def_fg;
-			else if (parse_color(arg, fg))
-				fprintf(stderr, "Bad color string \"%s\"\n", arg);
+			else
+				parse_color(arg, fg);
 		}
-	} else {
-		fprintf(stderr, "Unrecognized command \"%s\"\n", cmd);
 	}
 
 	/* Restore string for later redraws */
@@ -347,8 +346,8 @@ draw_text(char *text,
 	return nxpos;
 }
 
-#define TEXT_WIDTH(text, maxxpos, padding, commands)	\
-	draw_text(text, 0, 0, NULL, NULL, NULL, NULL, maxxpos, 0, padding, commands)
+#define TEXT_WIDTH(text, maxwidth, padding, commands)	\
+	draw_text(text, 0, 0, NULL, NULL, NULL, NULL, maxwidth, 0, padding, commands)
 
 static int
 draw_frame(Bar *b)
@@ -380,7 +379,6 @@ draw_frame(Bar *b)
 	/* Draw on images */
 	uint32_t xpos_left = 0;
 	uint32_t ypos = (b->height + font->ascent - font->descent) / 2;
-
 	uint32_t boxs = font->height / 9;
 	uint32_t boxw = font->height / 6 + 2;
 
@@ -419,7 +417,8 @@ draw_frame(Bar *b)
 			      b->selmon ? &activecolor : &inactivecolor, b->width - status_width,
 			      b->height, b->textpadding, false);
 
-	pixman_image_fill_boxes(PIXMAN_OP_SRC, bar, b->selmon ? &activecolor : &inactivecolor, 1,
+	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
+				b->selmon ? &activecolor : &inactivecolor, 1,
 				&(pixman_box32_t){
 					.x1 = xpos_left, .x2 = b->width - status_width,
 					.y1 = 0, .y2 = b->height
@@ -530,9 +529,8 @@ setup_bar(Bar *b)
 {
 	b->height = height;
 	b->textpadding = textpadding;
-		
-	b->layout = "[]=";
-	b->title = "";
+
+	snprintf(b->layout, sizeof b->layout, "[]=");
 		
 	b->xdg_output = zxdg_output_manager_v1_get_xdg_output(output_manager, b->wl_output);
 	if (!b->xdg_output)
@@ -633,20 +631,29 @@ advance_word(char **beg, char **end)
 static void
 read_stdin(void)
 {
-	ssize_t len = read(STDIN_FILENO, stdinbuf, sizeof stdinbuf);
-	if (len == -1)
-		CLEANUP_EDIE("read");
-	if (len == 0) {
-		run_display = 0;
-		return;
+	size_t len = 0;
+	for (;;) {
+		ssize_t rv = read(STDIN_FILENO, stdinbuf + len, stdinbuf_cap - len);
+		if (rv == -1) {
+			if (errno == EWOULDBLOCK)
+				break;
+			CLEANUP_EDIE("read");
+		}
+		if (rv == 0) {
+			run_display = 0;
+			return;
+		}
+
+		if ((len += rv) > stdinbuf_cap / 2)
+			if (!(stdinbuf = realloc(stdinbuf, (stdinbuf_cap *= 2))))
+				CLEANUP_EDIE("realloc");
 	}
 
-	char *end = (char *)&stdinbuf + len;
 	char *linebeg, *lineend;
 	char *wordbeg, *wordend;
 	
-	for (linebeg = (char *)&stdinbuf;
-	     (lineend = memchr(linebeg, '\n', end - linebeg));
+	for (linebeg = stdinbuf;
+	     (lineend = memchr(linebeg, '\n', stdinbuf + len - linebeg));
 	     linebeg = lineend) {
 		*lineend++ = '\0';
 		wordend = linebeg;
@@ -662,27 +669,42 @@ read_stdin(void)
 			continue;
 		
 		ADVANCE_IF_LAST_CONT();
-		
+
+		uint32_t val;
 		if (!strcmp(wordbeg, "tags")) {
 			ADVANCE_IF_LAST_CONT();
-			b->ctags = atoi(wordbeg);
+			if ((val = atoi(wordbeg)) != b->ctags) {
+				b->ctags = val;
+				b->redraw = true;
+			}
 			ADVANCE_IF_LAST_CONT();
-			b->mtags = atoi(wordbeg);
+			if ((val = atoi(wordbeg)) != b->mtags) {
+				b->mtags = val;
+				b->redraw = true;
+			}
 			ADVANCE_IF_LAST_CONT();
 			/* skip sel */
 			ADVANCE();
-			b->urg = atoi(wordbeg);
-			b->redraw = true;
+			if ((val = atoi(wordbeg)) != b->urg) {
+				b->urg = val;
+				b->redraw = true;
+			}
 		} else if (!strcmp(wordbeg, "layout")) {
-			b->layout = wordend;
-			b->redraw = true;
+			if (strcmp(b->layout, wordend) != 0) {
+				snprintf(b->layout, sizeof b->layout, "%s", wordend);
+				b->redraw = true;
+			}
 		} else if (!strcmp(wordbeg, "title")) {
-			b->title = wordend;
-			b->redraw = true;
+			if (strcmp(b->title, wordend) != 0) {
+				snprintf(b->title, sizeof b->title, "%s", wordend);
+				b->redraw = true;
+			}
 		} else if (!strcmp(wordbeg, "selmon")) {
 			ADVANCE();
-			b->selmon = atoi(wordbeg);
-			b->redraw = true;
+			if ((val = atoi(wordbeg)) != b->selmon) {
+				b->selmon = val;
+				b->redraw = true;
+			}
 		}
 	}
 }
@@ -731,12 +753,16 @@ read_socket(void)
 		if (!strcmp(wordbeg, "status")) {
 			if (all) {
 				DL_FOREACH(bars, b) {
+					if (strcmp(b->status, wordend) != 0) {
+						snprintf(b->status, sizeof b->status, "%s", wordend);
+						b->redraw = true;
+					}
+				}
+			} else {
+				if (strcmp(b->status, wordend) != 0) {
 					snprintf(b->status, sizeof b->status, "%s", wordend);
 					b->redraw = true;
 				}
-			} else {
-				snprintf(b->status, sizeof b->status, "%s", wordend);
-				b->redraw = true;
 			}
 		}
 	} while (0);
@@ -831,6 +857,7 @@ main(int argc, char **argv)
 	char *fontstr = "";
 	char *xdgruntimedir;
 	struct sockaddr_un sock_address;
+	Bar *b, *t;
 
 	/* Establish socket directory */
 	if (!(xdgruntimedir = getenv("XDG_RUNTIME_DIR")))
@@ -917,10 +944,18 @@ main(int argc, char **argv)
 	height = font->ascent + font->descent;
 	
 	/* Setup bars */
-	Bar *b;
 	DL_FOREACH(bars, b)
 		setup_bar(b);
 	wl_display_roundtrip(display);
+
+	/* Configure stdin */
+	if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) == -1)
+		EDIE("fcntl");
+	
+	/* Allocate stdin buffer */
+	if (!(stdinbuf = malloc(1024)))
+		EDIE("malloc");
+	stdinbuf_cap = 1024;
 	
 	/* Set up socket */
 	for (uint32_t i = 0;; i++) {
@@ -939,7 +974,7 @@ main(int argc, char **argv)
 	if (listen(sock_fd, SOMAXCONN) == -1)
 		CLEANUP_EDIE("listen");
 	fcntl(sock_fd, F_SETFD, FD_CLOEXEC | fcntl(sock_fd, F_GETFD));
-	
+
 	/* Set up signals */
 	signal(SIGINT, sig_handler);
 	signal(SIGHUP, sig_handler);
@@ -956,7 +991,6 @@ main(int argc, char **argv)
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);
 	
-	Bar *t;
 	DL_FOREACH_SAFE(bars, b, t)
 		teardown_bar(b);
 	
