@@ -55,8 +55,8 @@
 	"usage: dwlb [OPTIONS]\n"					\
 	"Bar Config\n"							\
 	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
-	"	-bottom				bars will initially be drawn at the bottom\n" \
 	"	-hidden				bars will initially be hidden\n" \
+	"	-bottom				bars will initially be drawn at the bottom\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-text-color [COLOR]		specify text color\n"	\
 	"	-active-color [COLOR]		specify color to indicate active tags or monitors\n" \
@@ -620,8 +620,10 @@ static void
 teardown_bar(Bar *b)
 {
 	zxdg_output_v1_destroy(b->xdg_output);
-	wl_surface_destroy(b->wl_surface);
-	zwlr_layer_surface_v1_destroy(b->layer_surface);
+	if (!b->hidden) {
+		zwlr_layer_surface_v1_destroy(b->layer_surface);
+		wl_surface_destroy(b->wl_surface);
+	}
 	if (b->xdg_output_name)
 		free(b->xdg_output_name);
 	free(b);
