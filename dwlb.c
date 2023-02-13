@@ -53,7 +53,7 @@
 #define VERSION "0.1"
 #define USAGE								\
 	"usage: dwlb [OPTIONS]\n"					\
-	"	-status	[OUTPUT] [TEXT]		send status text to dwlb\n" \
+	"Bar Config\n"							\
 	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-text-color [COLOR]		specify text color\n"	\
@@ -62,6 +62,15 @@
 	"	-urg-text-color [COLOR]		specify text color on urgent tags\n" \
 	"	-urg-bg-color [COLOR]		specify color of urgent tags\n"	\
 	"	-tags [TAG 1]...[TAG 9]		specify tag text\n"	\
+	"Commands\n"							\
+	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
+	"	-show [OUTPUT]			show bar\n"		\
+	"	-hide [OUTPUT]			hide bar\n"		\
+	"	-toggle-visibility [OUTPUT]	toggle bar visibility\n" \
+	"	-set-top [OUTPUT]		draw bar at the top\n"	\
+	"	-set-bottom [OUTPUT]		draw bar at the bottom\n" \
+	"	-toggle-location [OUTPUT]	toggle bar location\n" \
+	"Other\n"							\
 	"	-v				get version information\n" \
 	"	-h				view this help text\n"
 
@@ -89,6 +98,8 @@ struct Bar {
 	char title[512];
 	char status[512];
 
+	bool hidden;
+	bool bottom;
 	bool redraw;
 
 	Bar *prev, *next;
@@ -525,18 +536,8 @@ static const struct zxdg_output_v1_listener output_listener = {
 };
 
 static void
-setup_bar(Bar *b)
+show_bar(Bar *b)
 {
-	b->height = height;
-	b->textpadding = textpadding;
-
-	snprintf(b->layout, sizeof b->layout, "[]=");
-		
-	b->xdg_output = zxdg_output_manager_v1_get_xdg_output(output_manager, b->wl_output);
-	if (!b->xdg_output)
-		CLEANUP_DIE("Could not create xdg_output");
-	zxdg_output_v1_add_listener(b->xdg_output, &output_listener, b);
-		
 	b->wl_surface = wl_compositor_create_surface(compositor);
 	if (!b->wl_surface)
 		CLEANUP_DIE("Could not create wl_surface");
@@ -549,10 +550,36 @@ setup_bar(Bar *b)
 
 	zwlr_layer_surface_v1_set_size(b->layer_surface, 0, b->height);
 	zwlr_layer_surface_v1_set_anchor(b->layer_surface,
-					 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
+					 (b->bottom ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
 	wl_surface_commit(b->wl_surface);
+	
+	b->hidden = false;
+}
+
+static void
+hide_bar(Bar *b)
+{
+	zwlr_layer_surface_v1_destroy(b->layer_surface);
+	wl_surface_destroy(b->wl_surface);
+	b->hidden = true;
+}
+
+static void
+setup_bar(Bar *b)
+{
+	b->height = height;
+	b->textpadding = textpadding;
+
+	snprintf(b->layout, sizeof b->layout, "[]=");
+		
+	b->xdg_output = zxdg_output_manager_v1_get_xdg_output(output_manager, b->wl_output);
+	if (!b->xdg_output)
+		CLEANUP_DIE("Could not create xdg_output");
+	zxdg_output_v1_add_listener(b->xdg_output, &output_listener, b);
+
+	show_bar(b);
 }
 
 static void
@@ -710,6 +737,32 @@ read_stdin(void)
 }
 
 static void
+bar_set_top(Bar *b)
+{
+	if (!b->hidden) {
+		zwlr_layer_surface_v1_set_anchor(b->layer_surface,
+						 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
+						 | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
+						 | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+		b->redraw = true;
+	}
+	b->bottom = false;
+}
+
+static void
+bar_set_bottom(Bar *b)
+{
+	if (!b->hidden) {
+		zwlr_layer_surface_v1_set_anchor(b->layer_surface,
+						 ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+						 | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
+						 | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+		b->redraw = true;
+	}
+	b->bottom = true;
+}
+
+static void
 read_socket(void)
 {
 	int cli_fd;
@@ -748,9 +801,11 @@ read_socket(void)
 		if (!all && !b)
 			break;
 
-		ADVANCE_IF_LAST_BREAK();
+		ADVANCE();
 
 		if (!strcmp(wordbeg, "status")) {
+			if (!wordend)
+				break;
 			if (all) {
 				DL_FOREACH(bars, b) {
 					if (strcmp(b->status, wordend) != 0) {
@@ -763,6 +818,70 @@ read_socket(void)
 					snprintf(b->status, sizeof b->status, "%s", wordend);
 					b->redraw = true;
 				}
+			}
+		} else if (!strcmp(wordbeg, "show")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (b->hidden)
+						show_bar(b);
+			} else {
+				if (b->hidden)
+					show_bar(b);
+			}
+		} else if (!strcmp(wordbeg, "hide")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (!b->hidden)
+						hide_bar(b);
+			} else {
+				if (!b->hidden)
+					hide_bar(b);
+			}
+		} else if (!strcmp(wordbeg, "toggle-visibility")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (b->hidden)
+						show_bar(b);
+					else
+						hide_bar(b);
+			} else {
+				if (b->hidden)
+					show_bar(b);
+				else
+					hide_bar(b);
+			}
+		} else if (!strcmp(wordbeg, "set-top")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (b->bottom)
+						bar_set_top(b);
+						
+			} else {
+				if (b->bottom)
+					bar_set_top(b);
+			}
+		} else if (!strcmp(wordbeg, "set-bottom")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (!b->bottom)
+						bar_set_bottom(b);
+						
+			} else {
+				if (!b->bottom)
+					bar_set_bottom(b);
+			}
+		} else if (!strcmp(wordbeg, "toggle-location")) {
+			if (all) {
+				DL_FOREACH(bars, b)
+					if (b->bottom)
+						bar_set_top(b);
+					else
+						bar_set_bottom(b);
+			} else {
+				if (b->bottom)
+					bar_set_top(b);
+				else
+					bar_set_bottom(b);
 			}
 		}
 	} while (0);
@@ -799,7 +918,8 @@ event_loop(void)
 		Bar *b;
 		DL_FOREACH(bars, b) {
 			if (b->redraw) {
-				draw_frame(b);
+				if (!b->hidden)
+					draw_frame(b);
 				b->redraw = false;
 			}
 		}
@@ -874,6 +994,36 @@ main(int argc, char **argv)
 			if (++i + 1 >= argc)
 				DIE("Option -status requires two arguments");
 			client_send_command(&sock_address, argv[i], "status", argv[i + 1]);
+			return 0;
+		} else if (!strcmp(argv[i], "-show")) {
+			if (++i >= argc)
+				DIE("Option -show requires an argument");
+			client_send_command(&sock_address, argv[i], "show", NULL);
+			return 0;
+		} else if (!strcmp(argv[i], "-hide")) {
+			if (++i >= argc)
+				DIE("Option -hide requires an argument");
+			client_send_command(&sock_address, argv[i], "hide", NULL);
+			return 0;
+		} else if (!strcmp(argv[i], "-toggle-visibility")) {
+			if (++i >= argc)
+				DIE("Option -toggle requires an argument");
+			client_send_command(&sock_address, argv[i], "toggle-visibility", NULL);
+			return 0;
+		} else if (!strcmp(argv[i], "-set-top")) {
+			if (++i >= argc)
+				DIE("Option -set-top requires an argument");
+			client_send_command(&sock_address, argv[i], "set-top", NULL);
+			return 0;
+		} else if (!strcmp(argv[i], "-set-bottom")) {
+			if (++i >= argc)
+				DIE("Option -set-bottom requires an argument");
+			client_send_command(&sock_address, argv[i], "set-bottom", NULL);
+			return 0;
+		} else if (!strcmp(argv[i], "-toggle-location")) {
+			if (++i >= argc)
+				DIE("Option -toggle-location requires an argument");
+			client_send_command(&sock_address, argv[i], "toggle-location", NULL);
 			return 0;
 		} else if (!strcmp(argv[i], "-hide-vacant-tags")) {
 			hide_vacant = true;
