@@ -55,13 +55,15 @@
 	"usage: dwlb [OPTIONS]\n"					\
 	"Bar Config\n"							\
 	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
+	"	-bottom				bars will initially be drawn at the bottom\n" \
+	"	-hidden				bars will initially be hidden\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-text-color [COLOR]		specify text color\n"	\
 	"	-active-color [COLOR]		specify color to indicate active tags or monitors\n" \
 	"	-inactive-color [COLOR]		specify color to indicate inactive tags or monitors\n" \
 	"	-urg-text-color [COLOR]		specify text color on urgent tags\n" \
 	"	-urg-bg-color [COLOR]		specify color of urgent tags\n"	\
-	"	-tags [TAG 1]...[TAG 9]		specify tag text\n"	\
+	"	-tags [TAG 1]...[TAG 9]		specify custom tag names\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
 	"	-show [OUTPUT]			show bar\n"		\
@@ -69,7 +71,7 @@
 	"	-toggle-visibility [OUTPUT]	toggle bar visibility\n" \
 	"	-set-top [OUTPUT]		draw bar at the top\n"	\
 	"	-set-bottom [OUTPUT]		draw bar at the bottom\n" \
-	"	-toggle-location [OUTPUT]	toggle bar location\n" \
+	"	-toggle-location [OUTPUT]	toggle bar location\n"	\
 	"Other\n"							\
 	"	-v				get version information\n" \
 	"	-h				view this help text\n"
@@ -118,13 +120,16 @@ static struct wl_shm *shm;
 static struct zwlr_layer_shell_v1 *layer_shell;
 static struct zxdg_output_manager_v1 *output_manager;
 
+static Bar *bars = NULL;
+
 static uint32_t height;
 static uint32_t textpadding;
+static bool hidden = false;
+static bool bottom = false;
 
 static bool run_display = true;
 static bool ready = false;
 static bool hide_vacant = false;
-static Bar *bars = NULL;
 
 #define TAGSLEN 9
 static char *tags[TAGSLEN] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
@@ -135,6 +140,7 @@ static pixman_color_t inactivecolor = { .red = 0x2222, .green = 0x2222, .blue = 
 static pixman_color_t textcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
 static pixman_color_t urgbgcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
 static pixman_color_t urgtextcolor = { .red = 2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
+
 
 static void
 wl_buffer_release(void *data, struct wl_buffer *wl_buffer)
@@ -571,6 +577,8 @@ setup_bar(Bar *b)
 {
 	b->height = height;
 	b->textpadding = textpadding;
+	b->bottom = bottom;
+	b->hidden = hidden;
 
 	snprintf(b->layout, sizeof b->layout, "[]=");
 		
@@ -579,7 +587,8 @@ setup_bar(Bar *b)
 		CLEANUP_DIE("Could not create xdg_output");
 	zxdg_output_v1_add_listener(b->xdg_output, &output_listener, b);
 
-	show_bar(b);
+	if (!b->hidden)
+		show_bar(b);
 }
 
 static void
@@ -1027,6 +1036,10 @@ main(int argc, char **argv)
 			return 0;
 		} else if (!strcmp(argv[i], "-hide-vacant-tags")) {
 			hide_vacant = true;
+		} else if (!strcmp(argv[i], "-bottom")) {
+			bottom = true;
+		} else if (!strcmp(argv[i], "-hidden")) {
+			hidden = true;
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
