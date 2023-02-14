@@ -124,12 +124,15 @@ static struct zxdg_output_manager_v1 *output_manager;
 
 static Bar *bars = NULL;
 
+// TODO: it would be nice to have these be configurable, they seem to be set by the font currently?
 static uint32_t height;
 static uint32_t textpadding;
 
+// TODO: these seem to be operational, unless i have misunderstood their use?
 static bool run_display = true;
 static bool ready = false;
 
+// TODO: ideally there would be a default font, if there is i can't see where it is set
 static struct fcft_font *font;
 
 
