@@ -48,6 +48,8 @@
 	((a) < (b) ? (a) : (b))
 #define MAX(a, b)				\
 	((a) > (b) ? (a) : (b))
+#define LENGTH(X)				\
+	(sizeof X / sizeof X[0])
 
 #define PROGRAM "dwlb"
 #define VERSION "0.1"
@@ -63,7 +65,7 @@
 	"	-inactive-color [COLOR]		specify color to indicate inactive tags or monitors\n" \
 	"	-urg-text-color [COLOR]		specify text color on urgent tags\n" \
 	"	-urg-bg-color [COLOR]		specify color of urgent tags\n"	\
-	"	-tags [TAG 1]...[TAG 9]		specify custom tag names\n" \
+	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
 	"	-show [OUTPUT]			show bar\n"		\
@@ -120,27 +122,18 @@ static struct wl_shm *shm;
 static struct zwlr_layer_shell_v1 *layer_shell;
 static struct zxdg_output_manager_v1 *output_manager;
 
+static struct fcft_font *font;
+
 static Bar *bars = NULL;
 
+// TODO: it would be nice to have these be configurable, currently set by font
 static uint32_t height;
 static uint32_t textpadding;
-static bool hidden = false;
-static bool bottom = false;
 
 static bool run_display = true;
 static bool ready = false;
-static bool hide_vacant = false;
 
-#define TAGSLEN 9
-static char *tags[TAGSLEN] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
-
-static struct fcft_font *font;
-static pixman_color_t activecolor = { .red = 0x0000, .green = 0x5555, .blue = 0x7777, .alpha = 0xffff, };
-static pixman_color_t inactivecolor = { .red = 0x2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
-static pixman_color_t textcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
-static pixman_color_t urgbgcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
-static pixman_color_t urgtextcolor = { .red = 2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
-
+#include "config.h"
 
 static void
 wl_buffer_release(void *data, struct wl_buffer *wl_buffer)
@@ -399,7 +392,7 @@ draw_frame(Bar *b)
 	uint32_t boxs = font->height / 9;
 	uint32_t boxw = font->height / 6 + 2;
 
-	for (uint32_t i = 0; i < TAGSLEN; i++) {
+	for (uint32_t i = 0; i < LENGTH(tags); i++) {
 		bool active = b->mtags & 1 << i;
 		bool occupied = b->ctags & 1 << i;
 		bool urgent = b->urg & 1 << i;
@@ -985,7 +978,6 @@ sig_handler(int sig)
 int
 main(int argc, char **argv)
 {
-	char *fontstr = "";
 	char *xdgruntimedir;
 	struct sockaddr_un sock_address;
 	Bar *b, *t;
@@ -1072,11 +1064,11 @@ main(int argc, char **argv)
 			if (parse_color(argv[i], &urgbgcolor) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-tags")) {
-			if (i + TAGSLEN >= argc)
-				DIE("Option -tags requires %i arguments", TAGSLEN);
-			for (int j = 0; j < TAGSLEN; j++)
+			if (i + (int)LENGTH(tags) >= argc)
+				DIE("Option -tags requires %lu arguments", LENGTH(tags));
+			for (int j = 0; j < (int)LENGTH(tags); j++)
 				tags[j] = argv[i + 1 + j];
-			i += TAGSLEN;
+			i += LENGTH(tags);
 		} else if (!strcmp(argv[i], "-v")) {
 			fprintf(stderr, PROGRAM " " VERSION "\n");
 			return 0;
