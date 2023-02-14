@@ -5,6 +5,9 @@ CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -g
 
 all: $(BINS)
 
+config.h:
+	cp config.def.h $@
+
 clean:
 	$(RM) $(BINS) $(addsuffix .o,$(BINS))
 
@@ -44,7 +47,7 @@ wlr-layer-shell-unstable-v1-protocol.c:
 
 wlr-layer-shell-unstable-v1-protocol.o: wlr-layer-shell-unstable-v1-protocol.h
 
-dwlb.o: utf8.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h
+dwlb.o: utf8.h config.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h
 
 # Protocol dependencies
 dwlb: xdg-shell-protocol.o xdg-output-unstable-v1-protocol.o wlr-layer-shell-unstable-v1-protocol.o

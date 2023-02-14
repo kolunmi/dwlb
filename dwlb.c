@@ -23,6 +23,8 @@
 #include "xdg-output-unstable-v1-protocol.h"
 #include "wlr-layer-shell-unstable-v1-protocol.h"
 
+#include "config.h"
+
 #define DIE(fmt, ...)						\
 	do {							\
 		fprintf(stderr, fmt "\n", ##__VA_ARGS__);	\
@@ -124,22 +126,11 @@ static Bar *bars = NULL;
 
 static uint32_t height;
 static uint32_t textpadding;
-static bool hidden = false;
-static bool bottom = false;
 
 static bool run_display = true;
 static bool ready = false;
-static bool hide_vacant = false;
-
-#define TAGSLEN 9
-static char *tags[TAGSLEN] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 static struct fcft_font *font;
-static pixman_color_t activecolor = { .red = 0x0000, .green = 0x5555, .blue = 0x7777, .alpha = 0xffff, };
-static pixman_color_t inactivecolor = { .red = 0x2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
-static pixman_color_t textcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
-static pixman_color_t urgbgcolor = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
-static pixman_color_t urgtextcolor = { .red = 2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
 
 
 static void

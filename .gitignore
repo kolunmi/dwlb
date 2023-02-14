@@ -1,4 +1,5 @@
 dwlb
+config.h
 *.o
 wlr-layer-shell-unstable-v1-protocol.c
 wlr-layer-shell-unstable-v1-protocol.h
