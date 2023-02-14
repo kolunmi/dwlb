@@ -3,10 +3,11 @@ static bool hidden = false;
 static bool bottom = false;
 static bool hide_vacant = false;
 
-// define the number of tags and the tag names, if the number of tags is
-//  greater than TAGSLEN they will not be displayed, each tag also needs a name
-#define TAGSLEN 9
-static char *tags[TAGSLEN] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+// font
+static char *fontstr = "monospace:size=10";
+
+// tag names
+static char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 // set 16-bit colors for bar
 // 8-bit color can be converted to 16-bit color by simply duplicating values e.g
