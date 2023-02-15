@@ -63,13 +63,14 @@
 	"	-bottom				bars will initially be drawn at the bottom\n" \
 	"	-no-bottom			bars will initially be drawn at the top\n" \
 	"	-font [FONT]			specify a font\n"	\
+	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
+	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
 	"	-inactive-fg-color [COLOR]	specify text color of inactive tags or monitors\n" \
 	"	-inactive-fg-color [COLOR]	specify background color of inactive tags or monitors\n" \
 	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
-	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
 	"	-show [OUTPUT]			show bar\n"		\
@@ -1048,6 +1049,10 @@ main(int argc, char **argv)
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
 			fontstr = argv[i];
+		} else if (!strcmp(argv[i], "-vertical-padding")) {
+			if (++i >= argc)
+				DIE("Option -vertical-padding requires an argument");
+			vertical_padding = atoi(argv[i]);
 		} else if (!strcmp(argv[i], "-active-fg-color")) {
 			if (++i >= argc)
 				DIE("Option -active-fg-color requires an argument");
@@ -1113,7 +1118,7 @@ main(int argc, char **argv)
 	if (!font)
 		DIE("Could not load font");
 	textpadding = font->height / 2;
-	height = font->ascent + font->descent;
+	height = font->height + vertical_padding * 2;
 	
 	/* Setup bars */
 	DL_FOREACH(bars, b)
