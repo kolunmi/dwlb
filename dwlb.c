@@ -57,8 +57,11 @@
 	"usage: dwlb [OPTIONS]\n"					\
 	"Bar Config\n"							\
 	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
+	"	-no-hide-vacant-tags		display empty and inactive tags\n" \
 	"	-hidden				bars will initially be hidden\n" \
+	"	-no-hidden			bars will not initially be hidden\n" \
 	"	-bottom				bars will initially be drawn at the bottom\n" \
+	"	-no-bottom			bars will initially be drawn at the top\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
@@ -1031,10 +1034,16 @@ main(int argc, char **argv)
 			return 0;
 		} else if (!strcmp(argv[i], "-hide-vacant-tags")) {
 			hide_vacant = true;
+		} else if (!strcmp(argv[i], "-no-hide-vacant-tags")) {
+			hide_vacant = false;
 		} else if (!strcmp(argv[i], "-bottom")) {
 			bottom = true;
+		} else if (!strcmp(argv[i], "-no-bottom")) {
+			bottom = false;
 		} else if (!strcmp(argv[i], "-hidden")) {
 			hidden = true;
+		} else if (!strcmp(argv[i], "-no-hidden")) {
+			hidden = false;
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
