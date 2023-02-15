@@ -60,11 +60,12 @@
 	"	-hidden				bars will initially be hidden\n" \
 	"	-bottom				bars will initially be drawn at the bottom\n" \
 	"	-font [FONT]			specify a font\n"	\
-	"	-text-color [COLOR]		specify text color\n"	\
-	"	-active-color [COLOR]		specify color to indicate active tags or monitors\n" \
-	"	-inactive-color [COLOR]		specify color to indicate inactive tags or monitors\n" \
-	"	-urg-text-color [COLOR]		specify text color on urgent tags\n" \
-	"	-urg-bg-color [COLOR]		specify color of urgent tags\n"	\
+	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
+	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
+	"	-inactive-fg-color [COLOR]	specify text color of inactive tags or monitors\n" \
+	"	-inactive-fg-color [COLOR]	specify background color of inactive tags or monitors\n" \
+	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
+	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
 	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
@@ -399,36 +400,36 @@ draw_frame(Bar *b)
 
 		if (hide_vacant && !active && !occupied && !urgent)
 			continue;
-		
+
+		pixman_color_t *fg_color = urgent ? &urgent_fg_color : (active ? &active_fg_color : &inactive_fg_color);
+		pixman_color_t *bg_color = urgent ? &urgent_bg_color : (active ? &active_bg_color : &inactive_bg_color);
+			
 		if (!hide_vacant && occupied)
 			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
-						&textcolor, 1, &(pixman_box32_t){
+						fg_color, 1, &(pixman_box32_t){
 							.x1 = xpos_left + boxs, .x2 = xpos_left + boxs + boxw,
 							.y1 = boxs, .y2 = boxs + boxw
 						});
 		
-		if (urgent)
-			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground, background, &urgtextcolor,
-					      &urgbgcolor, b->width, b->height, b->textpadding, false);
-		else
-			xpos_left = draw_text(tags[i], xpos_left, ypos, foreground, background, &textcolor,
-					      active ? &activecolor : &inactivecolor, b->width, b->height,
-					      b->textpadding, false);
+		xpos_left = draw_text(tags[i], xpos_left, ypos, foreground, background, fg_color,
+				      bg_color, b->width, b->height, b->textpadding, false);
 	}
 	
-	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground, background, &textcolor,
-			      &inactivecolor, b->width, b->height, b->textpadding, false);
+	xpos_left = draw_text(b->layout, xpos_left, ypos, foreground, background, &inactive_fg_color,
+			      &inactive_bg_color, b->width, b->height, b->textpadding, false);
 
 	uint32_t status_width = TEXT_WIDTH(b->status, b->width - xpos_left, b->textpadding, true);
-	draw_text(b->status, b->width - status_width, ypos, foreground, background, &textcolor,
-		  &inactivecolor, b->width, b->height, b->textpadding, true);
+	draw_text(b->status, b->width - status_width, ypos, foreground,
+		  background, &inactive_fg_color, &inactive_bg_color,
+		  b->width, b->height, b->textpadding, true);
 
-	xpos_left = draw_text(b->title, xpos_left, ypos, foreground, background, &textcolor,
-			      b->selmon ? &activecolor : &inactivecolor, b->width - status_width,
-			      b->height, b->textpadding, false);
+	xpos_left = draw_text(b->title, xpos_left, ypos, foreground, background,
+			      b->selmon ? &active_fg_color : &inactive_fg_color,
+			      b->selmon ? &active_bg_color : &inactive_bg_color,
+			      b->width - status_width, b->height, b->textpadding, false);
 
 	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
-				b->selmon ? &activecolor : &inactivecolor, 1,
+				b->selmon ? &active_bg_color : &inactive_bg_color, 1,
 				&(pixman_box32_t){
 					.x1 = xpos_left, .x2 = b->width - status_width,
 					.y1 = 0, .y2 = b->height
@@ -1038,30 +1039,35 @@ main(int argc, char **argv)
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
 			fontstr = argv[i];
-		} else if (!strcmp(argv[i], "-text-color")) {
+		} else if (!strcmp(argv[i], "-active-fg-color")) {
 			if (++i >= argc)
-				DIE("Option -text-color requires an argument");
-			if (parse_color(argv[i], &textcolor) == -1)
+				DIE("Option -active-fg-color requires an argument");
+			if (parse_color(argv[i], &active_fg_color) == -1)
 				DIE("malformed color string");
-		} else if (!strcmp(argv[i], "-active-color")) {
+		} else if (!strcmp(argv[i], "-active-bg-color")) {
 			if (++i >= argc)
-				DIE("Option -active-color requires an argument");
-			if (parse_color(argv[i], &activecolor) == -1)
+				DIE("Option -active-bg-color requires an argument");
+			if (parse_color(argv[i], &active_bg_color) == -1)
 				DIE("malformed color string");
-		} else if (!strcmp(argv[i], "-inactive-color")) {
+		} else if (!strcmp(argv[i], "-inactive-fg-color")) {
 			if (++i >= argc)
-				DIE("Option -inactive-color requires an argument");
-			if (parse_color(argv[i], &inactivecolor) == -1)
+				DIE("Option -inactive-fg-color requires an argument");
+			if (parse_color(argv[i], &inactive_fg_color) == -1)
 				DIE("malformed color string");
-		} else if (!strcmp(argv[i], "-urg-text-color")) {
+		} else if (!strcmp(argv[i], "-inactive-bg-color")) {
 			if (++i >= argc)
-				DIE("Option -urg-text-color requires an argument");
-			if (parse_color(argv[i], &urgtextcolor) == -1)
+				DIE("Option -inactive-bg-color requires an argument");
+			if (parse_color(argv[i], &inactive_bg_color) == -1)
 				DIE("malformed color string");
-		} else if (!strcmp(argv[i], "-urg-bg-color")) {
+		} else if (!strcmp(argv[i], "-urgent-fg-color")) {
 			if (++i >= argc)
-				DIE("Option -urg-bg-color requires an argument");
-			if (parse_color(argv[i], &urgbgcolor) == -1)
+				DIE("Option -urgent-fg-color requires an argument");
+			if (parse_color(argv[i], &urgent_fg_color) == -1)
+				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-urgent-bg-color")) {
+			if (++i >= argc)
+				DIE("Option -urgent-bg-color requires an argument");
+			if (parse_color(argv[i], &urgent_bg_color) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-tags")) {
 			if (i + (int)LENGTH(tags) >= argc)
