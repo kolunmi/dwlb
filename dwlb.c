@@ -92,7 +92,8 @@ struct Bar {
 
 	uint32_t registry_name;
 	char *xdg_output_name;
-	
+
+	bool configured;
 	uint32_t width;
 	uint32_t height;
 	uint32_t textpadding;
@@ -131,7 +132,6 @@ static struct fcft_font *font;
 
 static Bar *bars = NULL;
 
-// TODO: it would be nice to have these be configurable, currently set by font
 static uint32_t height;
 static uint32_t textpadding;
 
@@ -461,15 +461,18 @@ static void
 layer_surface_configure(void *data, struct zwlr_layer_surface_v1 *surface,
 			uint32_t serial, uint32_t w, uint32_t h)
 {
+	zwlr_layer_surface_v1_ack_configure(surface, serial);
+	
 	Bar *b = (Bar *)data;
+	
+	if (b->configured && w == b->width && h == b->height)
+		return;
 	
 	b->width = w;
 	b->height = h;
 	b->stride = b->width * 4;
 	b->bufsize = b->stride * b->height;
-
-	zwlr_layer_surface_v1_set_exclusive_zone(b->layer_surface, b->height);
-	zwlr_layer_surface_v1_ack_configure(surface, serial);
+	b->configured = true;
 
 	draw_frame(b);
 }
@@ -477,10 +480,6 @@ layer_surface_configure(void *data, struct zwlr_layer_surface_v1 *surface,
 static void
 layer_surface_closed(void *data, struct zwlr_layer_surface_v1 *surface)
 {
-	Bar *b = (Bar *)data;
-	
-	zwlr_layer_surface_v1_destroy(surface);
-	wl_surface_destroy(b->wl_surface);
 	run_display = false;
 }
 
@@ -557,8 +556,9 @@ show_bar(Bar *b)
 					 (b->bottom ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+	zwlr_layer_surface_v1_set_exclusive_zone(b->layer_surface, b->height);
 	wl_surface_commit(b->wl_surface);
-	
+
 	b->hidden = false;
 }
 
@@ -567,6 +567,8 @@ hide_bar(Bar *b)
 {
 	zwlr_layer_surface_v1_destroy(b->layer_surface);
 	wl_surface_destroy(b->wl_surface);
+
+	b->configured = false;
 	b->hidden = true;
 }
 
