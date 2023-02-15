@@ -17,10 +17,11 @@ Pass `dwlb` as an argument to dwl's `-s` flag. This will populate each connected
 dwl -s 'dwlb -font "monospace:size=16"'
 ```
 
-## Status Text
-The `-status` option sends status text to existing instances of dwlb. This takes two arguments: a zxdg_output_v1 name (alternatively "all" to affect all outputs or "selected" for the current output) and the text itself.
+## Commands
+Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, or "selected" for the current output.
 
-The text may contain in-line color commands in the following format: `^fg/bg(HEXCOLOR)`. For example, `^fg(ff0000)` would set the foreground red. Colors can be reset by omitting the hex value. `^^` represents a single `^` character.
+### Status Text
+The `-status` command is used to write status text. The text may contain in-line color commands in the following format: `^fg/bg(HEXCOLOR)`. For example, `^fg(ff0000)` would set the foreground red. Colors can be reset by omitting the hex value. `^^` represents a single `^` character.
 
 ## Other Options
 Run `dwlb -h` for a full list of options.
