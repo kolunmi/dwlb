@@ -1,6 +1,7 @@
 # dwlb
 
-![screenshot](/screenshot.png "screenshot")
+![screenshot 1](/screenshot1.png "screenshot 1")
+![screenshot 2](/screenshot2.png "screenshot 2")
 
 dwlb is a simple bar for [dwl](https://github.com/djpohly/dwl). It is a modified version of [dtao](https://github.com/djpohly/dtao).
 
