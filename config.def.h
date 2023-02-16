@@ -21,3 +21,6 @@ static pixman_color_t urgent_bg_color = { .red = 0xeeee, .green = 0xeeee, .blue 
 
 // vertical pixel padding above and below text
 static uint32_t vertical_padding = 1;
+
+// allow in-line color commands in status text
+static bool status_commands = true;

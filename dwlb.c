@@ -56,12 +56,14 @@
 #define USAGE								\
 	"usage: dwlb [OPTIONS]\n"					\
 	"Bar Config\n"							\
-	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
-	"	-no-hide-vacant-tags		display empty and inactive tags\n" \
 	"	-hidden				bars will initially be hidden\n" \
 	"	-no-hidden			bars will not initially be hidden\n" \
 	"	-bottom				bars will initially be drawn at the bottom\n" \
 	"	-no-bottom			bars will initially be drawn at the top\n" \
+	"	-hide-vacant-tags		do not display empty and inactive tags\n" \
+	"	-no-hide-vacant-tags		display empty and inactive tags\n" \
+	"	-status-commands		enable in-line commands in status text\n" \
+	"	-no-status-commands		disable in-line commands in status text\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
@@ -425,7 +427,7 @@ draw_frame(Bar *b)
 	uint32_t status_width = TEXT_WIDTH(b->status, b->width - xpos_left, b->textpadding, true);
 	draw_text(b->status, b->width - status_width, ypos, foreground,
 		  background, &inactive_fg_color, &inactive_bg_color,
-		  b->width, b->height, b->textpadding, true);
+		  b->width, b->height, b->textpadding, status_commands);
 
 	xpos_left = draw_text(b->title, xpos_left, ypos, foreground, background,
 			      b->selmon ? &active_fg_color : &inactive_fg_color,
@@ -1047,6 +1049,10 @@ main(int argc, char **argv)
 			hidden = true;
 		} else if (!strcmp(argv[i], "-no-hidden")) {
 			hidden = false;
+		} else if (!strcmp(argv[i], "-status-commands")) {
+			status_commands = true;
+		} else if (!strcmp(argv[i], "-no-status-commands")) {
+			status_commands = false;
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
