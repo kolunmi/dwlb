@@ -1054,7 +1054,7 @@ main(int argc, char **argv)
 		} else if (!strcmp(argv[i], "-vertical-padding")) {
 			if (++i >= argc)
 				DIE("Option -vertical-padding requires an argument");
-			vertical_padding = atoi(argv[i]);
+			vertical_padding = MAX(MIN(atoi(argv[i]), 100), 0);
 		} else if (!strcmp(argv[i], "-active-fg-color")) {
 			if (++i >= argc)
 				DIE("Option -active-fg-color requires an argument");
