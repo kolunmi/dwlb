@@ -804,6 +804,8 @@ read_socket(void)
 			DL_FOREACH(bars, b)
 				if (b->selmon)
 					break;
+		} else if (!strcmp(wordbeg, "first")) {
+			b = bars;
 		} else {
 			DL_FOREACH(bars, b)
 				if (b->xdg_output_name)

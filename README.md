@@ -19,7 +19,7 @@ dwl -s 'dwlb -font "monospace:size=16"'
 ```
 
 ## Commands
-Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, or "selected" for the current output.
+Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, "selected" for the current output, or "first" for the first output in the internal list.
 
 ### Status Text
 The `-status` command is used to write status text. The text may contain in-line color commands in the following format: `^fg/bg(HEXCOLOR)`. For example, `^fg(ff0000)` would set the foreground red. Colors can be reset by omitting the hex value. `^^` represents a single `^` character. Color command functionality can be disabled with `-no-status-commands`.
