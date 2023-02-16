@@ -595,11 +595,11 @@ static void
 handle_global(void *data, struct wl_registry *registry,
 	      uint32_t name, const char *interface, uint32_t version)
 {
-	if (strcmp(interface, wl_compositor_interface.name) == 0) {
+	if (!strcmp(interface, wl_compositor_interface.name)) {
 		compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
-	} else if (strcmp(interface, wl_shm_interface.name) == 0) {
+	} else if (!strcmp(interface, wl_shm_interface.name)) {
 		shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
-	} else if (strcmp(interface, wl_output_interface.name) == 0) {
+	} else if (!strcmp(interface, wl_output_interface.name)) {
 		Bar *b = malloc(sizeof(Bar));
 		if (!b)
 			CLEANUP_EDIE("malloc");
@@ -609,9 +609,9 @@ handle_global(void *data, struct wl_registry *registry,
 		DL_APPEND(bars, b);
 		if (ready)
 			setup_bar(b);
-	} else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+	} else if (!strcmp(interface, zwlr_layer_shell_v1_interface.name)) {
 		layer_shell = wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1);
-	} else if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
+	} else if (!strcmp(interface, zxdg_output_manager_v1_interface.name)) {
 		output_manager = wl_registry_bind(registry, name, &zxdg_output_manager_v1_interface, 2);
 	}
 }
