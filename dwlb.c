@@ -136,7 +136,7 @@ struct Bar {
 	uint32_t selmon;
 	char layout[32];
 	char title[512];
-	char status[512];
+	char status[1024];
 	
 	StatusColor *status_colors;
 	uint32_t status_colors_l, status_colors_c;
@@ -349,12 +349,12 @@ draw_text(char *text,
 	
 	if (draw_fg)
 		pixman_image_unref(fg_fill);
-	if (!last_cp)
-		return ixpos;
 	if (buttons)
 		for (uint32_t i = 0; i < buttons_l; i++)
 			if (buttons[i].incomplete)
-				buttons[i].x2 = xpos;
+				buttons[i].x2 = last_cp ? xpos : ixpos;
+	if (!last_cp)
+		return ixpos;
 	
 	nxpos = xpos + padding;
 	if (draw_bg) {
@@ -561,7 +561,6 @@ shell_command(char *command)
 	if (fork() == 0) {
 		setsid();
 		execl("/bin/sh", "sh", "-c", command, NULL);
-		perror(" failed");
 		exit(EXIT_SUCCESS);
 	}
 }
@@ -822,34 +821,32 @@ static void
 teardown_seat(Seat *seat)
 {
 	wl_seat_destroy(seat->wl_seat);
+	if (seat->wl_pointer)
+		wl_pointer_destroy(seat->wl_pointer);
 	free(seat);
 }
 
 static void
 handle_global_remove(void *data, struct wl_registry *registry, uint32_t name)
 {
-	do {
-		Bar *bar;
-		DL_FOREACH(bar_list, bar)
-			if (bar->registry_name == name)
-				break;
-		if (!bar)
+	Bar *bar;
+	DL_FOREACH(bar_list, bar)
+		if (bar->registry_name == name)
 			break;
+	if (bar) {
 		DL_DELETE(bar_list, bar);
 		teardown_bar(bar);
 		return;
-	} while(0);
+	}
 
-	do {
-		Seat *seat;
-		DL_FOREACH(seat_list, seat)
-			if (seat->registry_name == name)
-				break;
-		if (!seat)
+	Seat *seat;
+	DL_FOREACH(seat_list, seat)
+		if (seat->registry_name == name)
 			break;
+	if (seat) {
 		DL_DELETE(seat_list, seat);
 		teardown_seat(seat);
-	} while(0);
+	}
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -886,7 +883,7 @@ read_stdin(void)
 			EDIE("read");
 		}
 		if (rv == 0) {
-			run_display = 0;
+			run_display = false;
 			return;
 		}
 
@@ -1247,19 +1244,21 @@ event_loop(void)
 
 		wl_display_flush(display);
 
-		if (select(MAX(sock_fd, wl_fd) + 1, &rfds, NULL, NULL, NULL) == -1)
-			continue;
-
+		if (select(MAX(sock_fd, wl_fd) + 1, &rfds, NULL, NULL, NULL) == -1) {
+			if (errno == EINTR)
+				continue;
+			else
+				EDIE("select");
+		}
+		
 		if (FD_ISSET(wl_fd, &rfds))
 			if (wl_display_dispatch(display) == -1)
 				break;
-		
 		if (FD_ISSET(STDIN_FILENO, &rfds))
 			read_stdin();
-
 		if (FD_ISSET(sock_fd, &rfds))
 			read_socket();
-
+		
 		Bar *bar;
 		DL_FOREACH(bar_list, bar) {
 			if (bar->redraw) {
