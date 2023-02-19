@@ -269,7 +269,6 @@ draw_text(char *text,
 	uint32_t color_ind = 0;
 
 	for (char *p = text; *p; p++) {
-		/* Check for color changes */
 		if (state == UTF8_ACCEPT) {
 			if (colors && (draw_fg || draw_bg)) {
 				while (color_ind < colors_l && p == colors[color_ind].start) {
@@ -1016,88 +1015,91 @@ set_status(Bar *bar, char *text)
 {
 	bar->status_colors_l = 0;
 	bar->status_buttons_l = 0;
-
-	size_t str_pos = 0;
-	uint32_t codepoint;
-	uint32_t state = UTF8_ACCEPT;
-
-	StatusButton *left_button = NULL;
-	StatusButton *middle_button = NULL;
-	StatusButton *right_button = NULL;
 	
-	for (char *p = text; *p && str_pos < sizeof(bar->status) - 1; p++) {
-		if (state == UTF8_ACCEPT && *p == '^') {
-			p++;
-			if (*p != '^') {
-				char *arg, *end;
-				if (!(arg = strchr(p, '(')) || !(end = strchr(arg + 1, ')')))
+	if (status_commands) {
+		size_t str_pos = 0;
+		uint32_t codepoint;
+		uint32_t state = UTF8_ACCEPT;
+
+		StatusButton *left_button = NULL;
+		StatusButton *middle_button = NULL;
+		StatusButton *right_button = NULL;
+	
+		for (char *p = text; *p && str_pos < sizeof(bar->status) - 1; p++) {
+			if (state == UTF8_ACCEPT && *p == '^') {
+				p++;
+				if (*p != '^') {
+					char *arg, *end;
+					if (!(arg = strchr(p, '(')) || !(end = strchr(arg + 1, ')')))
+						continue;
+					*arg++ = '\0';
+					*end = '\0';
+				
+					if (!strcmp(p, "bg")) {
+						StatusColor *status_color;
+						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
+						if (!*arg)
+							status_color->color = inactive_bg_color;
+						else
+							parse_color(arg, &status_color->color);
+						status_color->bg = true;
+						status_color->start = bar->status + str_pos;
+					} else if (!strcmp(p, "fg")) {
+						StatusColor *status_color;
+						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
+						if (!*arg)
+							status_color->color = inactive_fg_color;
+						else
+							parse_color(arg, &status_color->color);
+						status_color->bg = false;
+						status_color->start = bar->status + str_pos;
+					} else if (!strcmp(p, "lm")) {
+						if (left_button) {
+							left_button->end = bar->status + str_pos;
+							left_button = NULL;
+						} else if (*arg) {
+							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, left_button);
+							left_button->button = BTN_LEFT;
+							snprintf(left_button->command, sizeof left_button->command, "%s", arg);
+							left_button->start = bar->status + str_pos;
+						}
+					} else if (!strcmp(p, "mm")) {
+						if (middle_button) {
+							middle_button->end = bar->status + str_pos;
+							middle_button = NULL;
+						} else if (*arg) {
+							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, middle_button);
+							middle_button->button = BTN_MIDDLE;
+							snprintf(middle_button->command, sizeof middle_button->command, "%s", arg);
+							middle_button->start = bar->status + str_pos;
+						}
+					} else if (!strcmp(p, "rm")) {
+						if (right_button) {
+							right_button->end = bar->status + str_pos;
+							right_button = NULL;
+						} else if (*arg) {
+							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, right_button);
+							right_button->button = BTN_RIGHT;
+							snprintf(right_button->command, sizeof right_button->command, "%s", arg);
+							right_button->start = bar->status + str_pos;
+						}
+					} 
+
+					*--arg = '(';
+					*end = ')';
+				
+					p = end;
 					continue;
-				*arg++ = '\0';
-				*end = '\0';
-				
-				if (!strcmp(p, "bg")) {
-					StatusColor *status_color;
-					ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
-					if (!*arg)
-						status_color->color = inactive_bg_color;
-					else
-						parse_color(arg, &status_color->color);
-					status_color->bg = true;
-					status_color->start = bar->status + str_pos;
-				} else if (!strcmp(p, "fg")) {
-					StatusColor *status_color;
-					ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
-					if (!*arg)
-						status_color->color = inactive_fg_color;
-					else
-						parse_color(arg, &status_color->color);
-					status_color->bg = false;
-					status_color->start = bar->status + str_pos;
-				} else if (!strcmp(p, "lm")) {
-					if (left_button) {
-						left_button->end = bar->status + str_pos;
-						left_button = NULL;
-					} else if (*arg) {
-						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, left_button);
-						left_button->button = BTN_LEFT;
-						snprintf(left_button->command, sizeof left_button->command, "%s", arg);
-						left_button->start = bar->status + str_pos;
-					}
-				} else if (!strcmp(p, "mm")) {
-					if (middle_button) {
-						middle_button->end = bar->status + str_pos;
-						middle_button = NULL;
-					} else if (*arg) {
-						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, middle_button);
-						middle_button->button = BTN_MIDDLE;
-						snprintf(middle_button->command, sizeof middle_button->command, "%s", arg);
-						middle_button->start = bar->status + str_pos;
-					}
-				} else if (!strcmp(p, "rm")) {
-					if (right_button) {
-						right_button->end = bar->status + str_pos;
-						right_button = NULL;
-					} else if (*arg) {
-						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, right_button);
-						right_button->button = BTN_RIGHT;
-						snprintf(right_button->command, sizeof right_button->command, "%s", arg);
-						right_button->start = bar->status + str_pos;
-					}
-				} 
-
-				*--arg = '(';
-				*end = ')';
-				
-				p = end;
-				continue;
+				}
 			}
+
+			bar->status[str_pos++] = *p;
+			utf8decode(&state, &codepoint, *p);
 		}
-
-		bar->status[str_pos++] = *p;
-		utf8decode(&state, &codepoint, *p);
+		bar->status[str_pos] = '\0';
+	} else {
+		snprintf(bar->status, sizeof bar->status, "%s", text);
 	}
-
-	bar->status[str_pos] = '\0';
 }
 
 static void
