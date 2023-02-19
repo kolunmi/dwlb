@@ -1096,6 +1096,14 @@ set_status(Bar *bar, char *text)
 			bar->status[str_pos++] = *p;
 			utf8decode(&state, &codepoint, *p);
 		}
+
+		if (left_button)
+			left_button->end = bar->status + str_pos;
+		if (middle_button)
+			middle_button->end = bar->status + str_pos;
+		if (right_button)
+			right_button->end = bar->status + str_pos;
+		
 		bar->status[str_pos] = '\0';
 	} else {
 		snprintf(bar->status, sizeof bar->status, "%s", text);
@@ -1498,6 +1506,8 @@ main(int argc, char **argv)
 	/* Clean everything up */
 	close(sock_fd);
 	unlink(socketpath);
+
+	free(stdinbuf);
 	
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);

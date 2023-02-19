@@ -22,7 +22,17 @@ dwl -s 'dwlb -font "monospace:size=16"'
 Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, "selected" for the current output, or "first" for the first output in the internal list.
 
 ### Status Text
-The `-status` command is used to write status text. The text may contain in-line color commands in the following format: `^fg/bg(HEXCOLOR)`. For example, `^fg(ff0000)` would set the foreground red. Colors can be reset by omitting the hex value. `^^` represents a single `^` character. Color command functionality can be disabled with `-no-status-commands`.
+The `-status` command is used to write status text. The text may contain in-line commands in the following format: `^cmd(argument)`:
+
+| Command             | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `^fg(HEXCOLOR)`     | Sets foreground color to `HEXCOLOR`.                                        |
+| `^bg(HEXCOLOR)`     | Sets background color to `HEXCOLOR`.                                        |
+| `^lm(SHELLCOMMAND)` | Begins or terminates left mouse button region with action `SHELLCOMMAND`.   |
+| `^mm(SHELLCOMMAND)` | Begins or terminates middle mouse button region with action `SHELLCOMMAND`. |
+| `^rm(SHELLCOMMAND)` | Begins or terminates right mouse button region with action `SHELLCOMMAND`.  |
+
+A color command with no argument reverts to the default value. `^^` represents a single `^` character. Status commands can be disabled with `-no-status-commands`.
 
 ## Other Options
 Run `dwlb -h` for a full list of options.
