@@ -53,7 +53,7 @@ dwlb.o: utf8.h config.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h w
 dwlb: xdg-shell-protocol.o xdg-output-unstable-v1-protocol.o wlr-layer-shell-unstable-v1-protocol.o
 
 # Library dependencies
-dwlb: CFLAGS+=$(shell pkg-config --cflags wayland-client fcft pixman-1)
-dwlb: LDLIBS+=$(shell pkg-config --libs wayland-client fcft pixman-1) -lrt
+dwlb: CFLAGS+=$(shell pkg-config --cflags wayland-client wayland-cursor fcft pixman-1)
+dwlb: LDLIBS+=$(shell pkg-config --libs wayland-client wayland-cursor fcft pixman-1) -lrt
 
 .PHONY: all clean install
