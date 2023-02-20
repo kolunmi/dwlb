@@ -5,10 +5,18 @@
 
 dwlb is a simple bar for [dwl](https://github.com/djpohly/dwl). It is a modified version of [dtao](https://github.com/djpohly/dtao).
 
+## Dependencies
+* libwayland-client
+* libwayland-cursor
+* pixman
+* fcft
+* uthash
+
 ## Installation
 ```bash
 git clone https://github.com/kolunmi/dwlb
 cd dwlb
+make
 make install
 ```
 
@@ -22,9 +30,9 @@ dwl -s 'dwlb -font "monospace:size=16"'
 Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, "selected" for the current output, or "first" for the first output in the internal list.
 
 ### Status Text
-The `-status` command is used to write status text. The text may contain in-line commands in the following format: `^cmd(argument)`:
+The `-status` command is used to write status text. The text may contain in-line commands in the following format: `^cmd(argument)`.
 
-| Command             | Description                                                                 |
+| In-Line Command     | Description                                                                 |
 |---------------------|-----------------------------------------------------------------------------|
 | `^fg(HEXCOLOR)`     | Sets foreground color to `HEXCOLOR`.                                        |
 | `^bg(HEXCOLOR)`     | Sets background color to `HEXCOLOR`.                                        |
