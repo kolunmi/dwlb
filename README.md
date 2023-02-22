@@ -3,7 +3,7 @@
 ![screenshot 1](/screenshot1.png "screenshot 1")
 ![screenshot 2](/screenshot2.png "screenshot 2")
 
-dwlb is a simple bar for [dwl](https://github.com/djpohly/dwl). It is a modified version of [dtao](https://github.com/djpohly/dtao).
+dwlb is a feature-complete bar for [dwl](https://github.com/djpohly/dwl).
 
 ## Dependencies
 * libwayland-client
@@ -26,6 +26,9 @@ Pass `dwlb` as an argument to dwl's `-s` flag. This will populate each connected
 dwl -s 'dwlb -font "monospace:size=16"'
 ```
 
+## Ipc
+If dwl is patched appropriately, dwlb is capable of communicating directly with dwl. When ipc is enabled with `-ipc`, dwlb does not read from stdin, and clicking tags functions as you would expect. Ipc can be disabled with `-no-ipc`.
+
 ## Commands
 Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, "selected" for the current output, or "first" for the first output in the internal list.
 
@@ -44,3 +47,7 @@ A color command with no argument reverts to the default value. `^^` represents a
 
 ## Other Options
 Run `dwlb -h` for a full list of options.
+
+## Acknowledgements
+* [dtao](https://github.com/djpohly/dtao)
+* [somebar](https://sr.ht/~raphi/somebar/)

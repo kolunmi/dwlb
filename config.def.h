@@ -1,3 +1,6 @@
+// use ipc functionality
+static bool ipc = false;
+
 // bar properties
 static bool hidden = false;
 static bool bottom = false;
@@ -6,8 +9,8 @@ static bool hide_vacant = false;
 // font
 static char *fontstr = "monospace:size=10";
 
-// tag names
-static char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+// tag names if ipc is disabled
+static char *tags_noipc[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 // set 16-bit colors for bar
 // 8-bit color can be converted to 16-bit color by simply duplicating values e.g

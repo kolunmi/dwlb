@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="net_tapesoftware_dwl_wm_unstable_v1">
+    <copyright>
+        Copyright (c) 2021 Raphael Robatsch
+
+        Permission is hereby granted, free of charge, to any person obtaining a
+        copy of this software and associated documentation files (the
+        "Software"), to deal in the Software without restriction, including
+        without limitation the rights to use, copy, modify, merge, publish,
+        distribute, sublicense, and/or sell copies of the Software, and to
+        permit persons to whom the Software is furnished to do so, subject to
+        the following conditions:
+
+        The above copyright notice and this permission notice (including the
+        next paragraph) shall be included in all copies or substantial portions
+        of the Software.
+
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    </copyright>
+
+    <interface name="znet_tapesoftware_dwl_wm_v1" version="1">
+        <description summary="control the dwl state">
+            This interface is exposed as a global in the wl_registry.
+
+            Clients can use this protocol to receive updates of the window manager
+            state (active tags, active layout, and focused window).
+            Clients can also control this state.
+
+            After binding, the client will receive the available tags and layouts
+            with the 'tag' and 'layout' events. These can be used in subsequent
+            dwl_wm_monitor_v1.set_tags/set_layout requests, and to interpret the
+            dwl_wm_monitor_v1.layout/tag events.
+        </description>
+
+        <request name="release" type="destructor">
+            <description summary="release dwl_wm">
+                This request indicates that the client will not use the dwl_wm
+                object any more. Objects that have been created through this instance
+                are not affected.
+            </description>
+        </request>
+
+        <request name="get_monitor">
+            <description summary="gets a dwl monitor from an output">
+                Gets a dwl monitor for the specified output. The window manager
+                state on the output can be controlled using the monitor.
+            </description>
+            <arg name="id" type="new_id" interface="znet_tapesoftware_dwl_wm_monitor_v1" />
+            <arg name="output" type="object" interface="wl_output" />
+        </request>
+
+        <event name="tag">
+            <description summary="announces the presence of a tag">
+                This event is sent immediately after binding.
+                A roundtrip after binding guarantees that the client has received all tags.
+            </description>
+            <arg name="name" type="string"/>
+        </event>
+
+        <event name="layout">
+            <description summary="announces the presence of a layout">
+                This event is sent immediately after binding.
+                A roundtrip after binding guarantees that the client has received all layouts.
+            </description>
+            <arg name="name" type="string"/>
+        </event>
+    </interface>
+
+    <interface name="znet_tapesoftware_dwl_wm_monitor_v1" version="1">
+        <description summary="control one monitor">
+            Observes and controls one monitor.
+
+            Events are double-buffered: Clients should cache all events and only
+            redraw themselves once the 'frame' event is sent.
+
+            Requests are not double-buffered: The compositor will update itself
+            immediately.
+        </description>
+
+        <enum name="tag_state">
+            <entry name="none" value="0" summary="no state"/>
+            <entry name="active" value="1" summary="tag is active"/>
+            <entry name="urgent" value="2" summary="tag has at least one urgent client"/>
+        </enum>
+
+        <request name="release" type="destructor">
+            <description summary="release dwl_monitor">
+                This request indicates that the client is done with this dwl_monitor.
+                All further requests are ignored.
+            </description>
+        </request>
+
+        <event name="selected">
+            <description summary="updates the selected state of the monitor">
+                If 'selected' is nonzero, this monitor is the currently selected one.
+            </description>
+            <arg name="selected" type="uint"/>
+        </event>
+
+        <event name="tag">
+            <description summary="updates the state of one tag">
+                Announces the update of a tag. num_clients and focused_client can be
+                used to draw client indicators.
+            </description>
+            <arg name="tag" type="uint" summary="index of a tag received by the dwl_wm_v1.tag event." />
+            <arg name="state" type="uint" enum="tag_state"/>
+            <arg name="num_clients" type="uint" summary="number of clients on this tag"/>
+            <arg name="focused_client" type="int" summary="out of num_clients. -1 if there is no focused client"/>
+        </event>
+
+        <event name="layout">
+            <description summary="updates the selected layout">
+                Announces the update of the selected layout.
+            </description>
+            <arg name="layout" type="uint" summary="index of a layout received by the dwl_wm_v1.layout event."/>
+        </event>
+
+        <event name="title">
+            <description summary="updates the focused client">
+                Announces the update of the selected client.
+            </description>
+            <arg name="title" type="string"/>
+        </event>
+
+        <event name="frame">
+            <description summary="end of status update sequence">
+                Sent after all other events belonging to the status update has been sent.
+                Clients should redraw themselves now.
+            </description>
+        </event>
+
+        <request name="set_tags">
+            <description summary="sets the active tags on this monitor.">
+                Changes are applied immediately.
+            </description>
+            <arg name="tagmask" type="uint" summary="bitmask of the tags that should be set."/>
+            <arg name="toggle_tagset" type="uint"/>
+        </request>
+
+        <request name="set_client_tags">
+            <description summary="updates the tags of the focused client.">
+                tags are updated as follows:
+                new_tags = (current_tags AND and_tags) XOR xor_tags
+
+                Changes are applied immediately.
+            </description>
+            <arg name="and_tags" type="uint"/>
+            <arg name="xor_tags" type="uint"/>
+        </request>
+
+        <request name="set_layout">
+            <description summary="sets the active layout on this monitor.">
+                Changes are applied immediately.
+            </description>
+            <arg name="layout" type="uint" summary="index of a layout received by the dwl_wm_v1.layout event."/>
+        </request>
+    </interface>
+</protocol>

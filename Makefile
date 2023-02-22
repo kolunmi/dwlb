@@ -47,10 +47,20 @@ wlr-layer-shell-unstable-v1-protocol.c:
 
 wlr-layer-shell-unstable-v1-protocol.o: wlr-layer-shell-unstable-v1-protocol.h
 
-dwlb.o: utf8.h config.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h
+net-tapesoftware-dwl-wm-unstable-v1-protocol.h:
+	$(WAYLAND_SCANNER) client-header \
+		protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
+
+net-tapesoftware-dwl-wm-unstable-v1-protocol.c:
+	$(WAYLAND_SCANNER) private-code \
+		protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
+
+net-tapesoftware-dwl-wm-unstable-v1-protocol.o: net-tapesoftware-dwl-wm-unstable-v1-protocol.h
+
+dwlb.o: utf8.h config.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h net-tapesoftware-dwl-wm-unstable-v1-protocol.o
 
 # Protocol dependencies
-dwlb: xdg-shell-protocol.o xdg-output-unstable-v1-protocol.o wlr-layer-shell-unstable-v1-protocol.o
+dwlb: xdg-shell-protocol.o xdg-output-unstable-v1-protocol.o wlr-layer-shell-unstable-v1-protocol.o net-tapesoftware-dwl-wm-unstable-v1-protocol.o
 
 # Library dependencies
 dwlb: CFLAGS+=$(shell pkg-config --cflags wayland-client wayland-cursor fcft pixman-1)
