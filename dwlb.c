@@ -1590,8 +1590,11 @@ main(int argc, char **argv)
 			int v;
 			if ((v = atoi(argv[i])) <= 0 || i + v >= argc)
 				DIE("-tags: invalid arguments");
-			if (tags)
+			if (tags) {
+				for (uint32_t j = 0; j < tags_l; j++)
+					free(tags[j]);
 				free(tags);
+			}
 			if (!(tags = malloc(v * sizeof(char *))))
 				EDIE("malloc");
 			for (int j = 0; j < v; j++)
