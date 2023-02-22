@@ -70,7 +70,7 @@
 	"usage: dwlb [OPTIONS]\n"					\
 	"Ipc\n"								\
 	"	-ipc				allow commands to be sent to dwl (dwl must be patched)\n" \
-	"	-no-ipc				disable ipc\n" \
+	"	-no-ipc				disable ipc\n"		\
 	"Bar Config\n"							\
 	"	-hidden				bars will initially be hidden\n" \
 	"	-no-hidden			bars will not initially be hidden\n" \
@@ -81,7 +81,7 @@
 	"	-status-commands		enable in-line commands in status text\n" \
 	"	-no-status-commands		disable in-line commands in status text\n" \
 	"	-font [FONT]			specify a font\n"	\
-	"	-tags [FIRST TAG]...[LAST TAG]	specify custom tag names\n" \
+	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names\n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
@@ -1585,11 +1585,20 @@ main(int argc, char **argv)
 			if (parse_color(argv[i], &urgent_bg_color) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-tags")) {
-			if (i + (int)LENGTH(tags_noipc) >= argc)
-				DIE("Option -tags requires %lu arguments", LENGTH(tags_noipc));
-			for (int j = 0; j < (int)LENGTH(tags_noipc); j++)
-				tags[j] = argv[i + 1 + j];
-			i += LENGTH(tags_noipc);
+			if (++i + 1 >= argc)
+				DIE("Option -tags requires at least two arguments");
+			int v;
+			if ((v = atoi(argv[i])) <= 0 || i + v >= argc)
+				DIE("-tags: invalid arguments");
+			if (tags)
+				free(tags);
+			if (!(tags = malloc(v * sizeof(char *))))
+				EDIE("malloc");
+			for (int j = 0; j < v; j++)
+				if (!(tags[j] = strdup(argv[i + 1 + j])))
+					EDIE("strdup");
+			tags_l = tags_c = v;
+			i += v;
 		} else if (!strcmp(argv[i], "-v")) {
 			fprintf(stderr, PROGRAM " " VERSION "\n");
 			return 0;
@@ -1621,15 +1630,22 @@ main(int argc, char **argv)
 	textpadding = font->height / 2;
 	height = font->height + vertical_padding * 2;
 
-	if (!ipc) {
-		/* Load in tag names */
+	/* Configure tag names */
+	if (ipc && tags) {
+		for (uint32_t i = 0; i < tags_l; i++)
+			free(tags[i]);
+		free(tags);
+		tags_l = tags_c = 0;
+		tags = NULL;
+	} else if (!ipc && !tags) {
 		if (!(tags = malloc(LENGTH(tags_noipc) * sizeof(char *))))
 			EDIE("malloc");
-		tags_l = LENGTH(tags_noipc);
+		tags_l = tags_c = LENGTH(tags_noipc);
 		for (uint32_t i = 0; i < tags_l; i++)
-			tags[i] = tags_noipc[i];
+			if (!(tags[i] = strdup(tags_noipc[i])))
+				EDIE("strdup");
 	}
-
+	
 	/* Setup bars */
 	DL_FOREACH(bar_list, bar)
 		setup_bar(bar);
@@ -1677,15 +1693,21 @@ main(int argc, char **argv)
 	/* Clean everything up */
 	close(sock_fd);
 	unlink(socketpath);
-
+	
 	if (!ipc)
 		free(stdinbuf);
+
+	if (tags) {
+		for (uint32_t i = 0; i < tags_l; i++)
+			free(tags[i]);
+		free(tags);
+	}
 	
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);
+	
 	if (ipc)
 		znet_tapesoftware_dwl_wm_v1_destroy(dwl_wm);
-	
 	DL_FOREACH_SAFE(bar_list, bar, bar2)
 		teardown_bar(bar);
 	DL_FOREACH_SAFE(seat_list, seat, seat2)
