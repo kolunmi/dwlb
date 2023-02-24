@@ -1,9 +1,11 @@
-# dwlb
+<div align="center">
+<h1>dwlb</h1>
+
+A fast, feature-complete bar for [dwl](https://github.com/djpohly/dwl).
 
 ![screenshot 1](/screenshot1.png "screenshot 1")
 ![screenshot 2](/screenshot2.png "screenshot 2")
-
-dwlb is a feature-complete bar for [dwl](https://github.com/djpohly/dwl).
+</div>
 
 ## Dependencies
 * libwayland-client
