@@ -502,7 +502,6 @@ output_name(void *data, struct zxdg_output_v1 *xdg_output, const char *name)
 {
 	Bar *bar = (Bar *)data;
 	
-	/* Is this necessary? */
 	if (bar->xdg_output_name)
 		free(bar->xdg_output_name);
 	if (!(bar->xdg_output_name = strdup(name)))
@@ -1151,8 +1150,7 @@ parse_color(const char *str, pixman_color_t *clr)
 static void
 set_status(Bar *bar, char *text)
 {
-	bar->status_colors_l = 0;
-	bar->status_buttons_l = 0;
+	bar->status_colors_l = bar->status_buttons_l = 0;
 
 	if (status_commands) {
 		uint32_t codepoint;
@@ -1310,8 +1308,27 @@ read_socket(void)
 			if (!wordend)
 				break;
 			if (all) {
-				DL_FOREACH(bar_list, bar) {
-					set_status(bar, wordend);
+				if (!bar_list)
+					break;
+				set_status(bar_list, wordend);
+				bar_list->redraw = true;
+
+				/* Copy over parsed status information to other bars */
+				DL_FOREACH(bar_list->next, bar) {
+					snprintf(bar->status, sizeof bar->status, "%s", bar_list->status);
+					bar->status_colors_l = bar->status_buttons_l = 0;
+					for (uint32_t i = 0; i < bar_list->status_colors_l; i++) {
+						StatusColor *status_color;
+						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
+						status_color->color = bar_list->status_colors[i].color;
+						status_color->bg = bar_list->status_colors[i].bg;
+						status_color->start = bar_list->status_colors[i].start - (char *)&bar_list->status + (char *)&bar->status;
+					}
+					for (uint32_t i = 0; i < bar_list->status_buttons_l; i++) {
+						StatusButton *status_button;
+						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, status_button);
+						*status_button = bar_list->status_buttons[i];
+					}
 					bar->redraw = true;
 				}
 			} else {
@@ -1444,17 +1461,17 @@ client_send_command(struct sockaddr_un *sock_address, const char *output,
 			
 	struct dirent *de;
 	bool newfd = true;
+
+	/* Send data to all dwlb instances */
 	while ((de = readdir(dir))) {
 		if (!strncmp(de->d_name, "dwlb-", 5)) {
-			if (newfd)
-				if ((sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
-					EDIE("socket");
+			if (newfd && (sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
+				EDIE("socket");
 			snprintf(sock_address->sun_path, sizeof sock_address->sun_path, "%s/%s", socketdir, de->d_name);
 			if (connect(sock_fd, (struct sockaddr *) sock_address, sizeof(*sock_address)) == -1) {
 				newfd = false;
 				continue;
 			}
-					
 			if (send(sock_fd, sockbuf, len, 0) == -1)
 				fprintf(stderr, "Could not send status data to '%s'\n", sock_address->sun_path);
 			close(sock_fd);
@@ -1670,14 +1687,14 @@ main(int argc, char **argv)
 		if ((sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
 			DIE("socket");
 		snprintf(sock_address.sun_path, sizeof sock_address.sun_path, "%s/dwlb-%i", socketdir, i);
-		if (connect(sock_fd, (struct sockaddr *) &sock_address, sizeof sock_address) == -1)
+		if (connect(sock_fd, (struct sockaddr *)&sock_address, sizeof sock_address) == -1)
 			break;
 		close(sock_fd);
 	}
 
 	socketpath = (char *)&sock_address.sun_path;
 	unlink(socketpath);
-	if (bind(sock_fd, (struct sockaddr *) &sock_address, sizeof sock_address) == -1)
+	if (bind(sock_fd, (struct sockaddr *)&sock_address, sizeof sock_address) == -1)
 		EDIE("bind");
 	if (listen(sock_fd, SOMAXCONN) == -1)
 		EDIE("listen");
@@ -1708,9 +1725,9 @@ main(int argc, char **argv)
 	
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);
-	
 	if (ipc)
 		znet_tapesoftware_dwl_wm_v1_destroy(dwl_wm);
+	
 	DL_FOREACH_SAFE(bar_list, bar, bar2)
 		teardown_bar(bar);
 	DL_FOREACH_SAFE(seat_list, seat, seat2)
