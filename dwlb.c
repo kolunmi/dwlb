@@ -407,12 +407,22 @@ draw_frame(Bar *bar)
 		pixman_color_t *fg_color = urgent ? &urgent_fg_color : (active ? &active_fg_color : &inactive_fg_color);
 		pixman_color_t *bg_color = urgent ? &urgent_bg_color : (active ? &active_bg_color : &inactive_bg_color);
 		
-		if (!hide_vacant && occupied)
+		if (!hide_vacant && occupied) {
 			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
 						fg_color, 1, &(pixman_box32_t){
 							.x1 = x + boxs, .x2 = x + boxs + boxw,
 							.y1 = boxs, .y2 = boxs + boxw
 						});
+			if ((!bar->selmon || !active) && boxw >= 3) {
+				/* Make box hollow */
+				pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
+							&(pixman_color_t){ 0 },
+							1, &(pixman_box32_t){
+								.x1 = x + boxs + 1, .x2 = x + boxs + boxw - 1,
+								.y1 = boxs + 1, .y2 = boxs + boxw - 1
+							});
+			}
+		}
 		
 		x = draw_text(tags[i], x, y, foreground, background, fg_color, bg_color,
 			      bar->width, bar->height, bar->textpadding, NULL, 0);
