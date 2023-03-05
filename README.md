@@ -45,6 +45,11 @@ The `-status` command is used to write status text. The text may contain in-line
 | `^mm(SHELLCOMMAND)` | Begins or terminates middle mouse button region with action `SHELLCOMMAND`. |
 | `^rm(SHELLCOMMAND)` | Begins or terminates right mouse button region with action `SHELLCOMMAND`.  |
 
+In this example, clicking the text highlighted in red will spawn the [foot](https://codeberg.org/dnkl/foot) terminal.
+```bash
+dwlb -status all 'text ^bg(ff0000)^lm(foot)text^bg()^lm() text'
+```
+
 A color command with no argument reverts to the default value. `^^` represents a single `^` character. Status commands can be disabled with `-no-status-commands`.
 
 ## Other Options
