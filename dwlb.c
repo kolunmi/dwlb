@@ -172,8 +172,8 @@ struct Seat {
 
 static int sock_fd;
 static char socketdir[256];
-static char *socketpath = NULL;
-static char sockbuf[768];
+static char *socketpath;
+static char sockbuf[4096];
 
 static char *stdinbuf;
 static size_t stdinbuf_cap;
@@ -187,13 +187,13 @@ static struct wl_cursor_image *cursor_image;
 static struct wl_surface *cursor_surface;
 static struct znet_tapesoftware_dwl_wm_v1 *dwl_wm;
 
-static char **tags = NULL;
+static char **tags;
 static uint32_t tags_l, tags_c;
-static char **layouts = NULL;
+static char **layouts;
 static uint32_t layouts_l, layouts_c;
 
-static Bar *bar_list = NULL;
-static Seat *seat_list = NULL;
+static Bar *bar_list;
+static Seat *seat_list;
 
 static struct fcft_font *font;
 static uint32_t height;
@@ -279,11 +279,9 @@ draw_text(char *text,
 				if (colors[color_ind].bg) {
 					if (draw_bg)
 						cur_bg_color = &colors[color_ind].color;
-				} else {
-					if (draw_fg) {
-						pixman_image_unref(fg_fill);
-						fg_fill = pixman_image_create_solid_fill(&colors[color_ind].color);
-					}
+				} else if (draw_fg) {
+					pixman_image_unref(fg_fill);
+					fg_fill = pixman_image_create_solid_fill(&colors[color_ind].color);
 				}
 				color_ind++;
 			}
@@ -1654,8 +1652,7 @@ main(int argc, char **argv)
 	/* Load selected font */
 	fcft_init(FCFT_LOG_COLORIZE_AUTO, 0, FCFT_LOG_CLASS_ERROR);
 	fcft_set_scaling_filter(FCFT_SCALING_FILTER_LANCZOS3);
-	font = fcft_from_name(1, (const char *[]) {fontstr}, NULL);
-	if (!font)
+	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, NULL)))
 		DIE("Could not load font");
 	textpadding = font->height / 2;
 	height = font->height + vertical_padding * 2;
@@ -1732,16 +1729,16 @@ main(int argc, char **argv)
 			free(tags[i]);
 		free(tags);
 	}
+
+	DL_FOREACH_SAFE(bar_list, bar, bar2)
+		teardown_bar(bar);
+	DL_FOREACH_SAFE(seat_list, seat, seat2)
+		teardown_seat(seat);
 	
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);
 	if (ipc)
 		znet_tapesoftware_dwl_wm_v1_destroy(dwl_wm);
-	
-	DL_FOREACH_SAFE(bar_list, bar, bar2)
-		teardown_bar(bar);
-	DL_FOREACH_SAFE(seat_list, seat, seat2)
-		teardown_seat(seat);
 	
 	fcft_destroy(font);
 	fcft_fini();
