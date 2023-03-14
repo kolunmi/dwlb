@@ -7,7 +7,7 @@ static bool bottom = false;
 static bool hide_vacant = false;
 
 // font
-static char *fontstr = "monospace:size=10";
+static char *fontstr = "monospace:size=16";
 
 // tag names if ipc is disabled
 static char *tags_noipc[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
@@ -27,3 +27,6 @@ static uint32_t vertical_padding = 1;
 
 // allow in-line color commands in status text
 static bool status_commands = true;
+
+// do not display current window title
+static bool no_title = false;

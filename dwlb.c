@@ -17,9 +17,9 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <utlist.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
+#include <wayland-util.h>
 
 #include "utf8.h"
 #include "xdg-shell-protocol.h"
@@ -65,7 +65,7 @@
 	} while (0)
 
 #define PROGRAM "dwlb"
-#define VERSION "0.1"
+#define VERSION "0.2"
 #define USAGE								\
 	"usage: dwlb [OPTIONS]\n"					\
 	"Ipc\n"								\
@@ -80,6 +80,8 @@
 	"	-no-hide-vacant-tags		display empty and inactive tags\n" \
 	"	-status-commands		enable in-line commands in status text\n" \
 	"	-no-status-commands		disable in-line commands in status text\n" \
+	"	-no-title			do not display current window title\n" \
+	"	-no-no-title			display current window title\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names\n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
@@ -114,61 +116,48 @@ typedef struct {
 	char command[128];
 } StatusButton;
 
-typedef struct Bar Bar;
-struct Bar {
-	struct zxdg_output_v1 *xdg_output;
+typedef struct {
 	struct wl_output *wl_output;
 	struct wl_surface *wl_surface;
 	struct zwlr_layer_surface_v1 *layer_surface;
+	struct zxdg_output_v1 *xdg_output;
 	struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor;
 
 	uint32_t registry_name;
 	char *xdg_output_name;
 
 	bool configured;
-	uint32_t width;
-	uint32_t height;
+	uint32_t width, height;
 	uint32_t textpadding;
-	uint32_t stride;
-	uint32_t bufsize;
+	uint32_t stride, bufsize;
 	
-	uint32_t mtags;
-	uint32_t ctags;
-	uint32_t urg;
-	uint32_t selmon;
+	uint32_t mtags, ctags, urg, sel;
 	char layout[32];
-	uint32_t layout_idx;
-	uint32_t last_layout_idx;
-	char title[1024];
-	char status[1024];
+	uint32_t layout_idx, last_layout_idx;
+	char title[1024], status[1024];
 	
 	StatusColor *status_colors;
 	uint32_t status_colors_l, status_colors_c;
 	StatusButton *status_buttons;
 	uint32_t status_buttons_l, status_buttons_c;
 
-	bool hidden;
-	bool bottom;
-	
+	bool hidden, bottom;
 	bool redraw;
 
-	Bar *prev, *next;
-};
+	struct wl_list link;
+} Bar;
 
-typedef struct Seat Seat;
-struct Seat {
+typedef struct {
 	struct wl_seat *wl_seat;
 	struct wl_pointer *wl_pointer;
-
 	uint32_t registry_name;
 
 	Bar *bar;
-	uint32_t pointer_x;
-	uint32_t pointer_y;
+	uint32_t pointer_x, pointer_y;
 	uint32_t pointer_button;
 
-	Seat *prev, *next;
-};
+	struct wl_list link;
+} Seat;
 
 static int sock_fd;
 static char socketdir[256];
@@ -183,24 +172,21 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct zwlr_layer_shell_v1 *layer_shell;
 static struct zxdg_output_manager_v1 *output_manager;
+static struct znet_tapesoftware_dwl_wm_v1 *dwl_wm;
 static struct wl_cursor_image *cursor_image;
 static struct wl_surface *cursor_surface;
-static struct znet_tapesoftware_dwl_wm_v1 *dwl_wm;
+
+static struct wl_list bar_list, seat_list;
 
 static char **tags;
 static uint32_t tags_l, tags_c;
 static char **layouts;
 static uint32_t layouts_l, layouts_c;
 
-static Bar *bar_list;
-static Seat *seat_list;
-
 static struct fcft_font *font;
-static uint32_t height;
-static uint32_t textpadding;
+static uint32_t height, textpadding;
 
-static bool run_display = true;
-static bool ready = false;
+static bool run_display;
 
 #include "config.h"
 
@@ -220,13 +206,13 @@ static int
 allocate_shm_file(size_t size)
 {
 	int fd = memfd_create("surface", MFD_CLOEXEC);
-	if (fd < 0)
+	if (fd == -1)
 		return -1;
 	int ret;
 	do {
 		ret = ftruncate(fd, size);
-	} while (ret < 0 && errno == EINTR);
-	if (ret < 0) {
+	} while (ret == -1 && errno == EINTR);
+	if (ret == -1) {
 		close(fd);
 		return -1;
 	}
@@ -247,11 +233,10 @@ draw_text(char *text,
 	  StatusColor *colors,
 	  uint32_t colors_l)
 {
-	if (!*text || !max_x)
+	if (!text || !*text || !max_x)
 		return x;
 
-	uint32_t ix = x;
-	uint32_t nx;
+	uint32_t ix = x, nx;
 
 	if ((nx = x + padding) + padding >= max_x)
 		return x;
@@ -267,11 +252,7 @@ draw_text(char *text,
 	if (draw_bg)
 		cur_bg_color = bg_color;
 
-	uint32_t color_ind = 0;
-	uint32_t codepoint;
-	uint32_t state = UTF8_ACCEPT;
-	uint32_t last_cp = 0;
-
+	uint32_t color_ind = 0, codepoint, state = UTF8_ACCEPT, last_cp = 0;
 	for (char *p = text; *p; p++) {
 		/* Check for new colors */
 		if (state == UTF8_ACCEPT && colors && (draw_fg || draw_bg)) {
@@ -325,12 +306,13 @@ draw_text(char *text,
 			}
 		}
 		
-		if (draw_bg)
+		if (draw_bg) {
 			pixman_image_fill_boxes(PIXMAN_OP_OVER, background,
 						cur_bg_color, 1, &(pixman_box32_t){
 							.x1 = x, .x2 = nx,
 							.y1 = 0, .y2 = buf_height
 						});
+		}
 		
 		/* increment pen position */
 		x = nx;
@@ -396,9 +378,10 @@ draw_frame(Bar *bar)
 	uint32_t boxw = font->height / 6 + 2;
 
 	for (uint32_t i = 0; i < tags_l; i++) {
-		bool active = bar->mtags & 1 << i;
-		bool occupied = bar->ctags & 1 << i;
-		bool urgent = bar->urg & 1 << i;
+		const bool active = bar->mtags & 1 << i;
+		const bool occupied = bar->ctags & 1 << i;
+		const bool urgent = bar->urg & 1 << i;
+		
 		if (hide_vacant && !active && !occupied && !urgent)
 			continue;
 
@@ -411,7 +394,7 @@ draw_frame(Bar *bar)
 							.x1 = x + boxs, .x2 = x + boxs + boxw,
 							.y1 = boxs, .y2 = boxs + boxw
 						});
-			if ((!bar->selmon || !active) && boxw >= 3) {
+			if ((!bar->sel || !active) && boxw >= 3) {
 				/* Make box hollow */
 				pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
 							&(pixman_color_t){ 0 },
@@ -436,14 +419,16 @@ draw_frame(Bar *bar)
 		  bar->width, bar->height, bar->textpadding,
 		  bar->status_colors, bar->status_colors_l);
 
-	x = draw_text(bar->title, x, y, foreground, background,
-		      bar->selmon ? &active_fg_color : &inactive_fg_color,
-		      bar->selmon ? &active_bg_color : &inactive_bg_color,
-		      bar->width - status_width, bar->height, bar->textpadding,
-		      NULL, 0);
+	if (!no_title) {
+		x = draw_text(bar->title, x, y, foreground, background,
+			      bar->sel ? &active_fg_color : &inactive_fg_color,
+			      bar->sel ? &active_bg_color : &inactive_bg_color,
+			      bar->width - status_width, bar->height, bar->textpadding,
+			      NULL, 0);
+	}
 
 	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
-				bar->selmon ? &active_bg_color : &inactive_bg_color, 1,
+				bar->sel ? &active_bg_color : &inactive_bg_color, 1,
 				&(pixman_box32_t){
 					.x1 = x, .x2 = bar->width - status_width,
 					.y1 = 0, .y2 = bar->height
@@ -564,11 +549,14 @@ pointer_enter(void *data, struct wl_pointer *pointer,
 {
 	Seat *seat = (Seat *)data;
 
+	seat->bar = NULL;
 	Bar *bar;
-	DL_FOREACH(bar_list, bar)
-		if (bar->wl_surface == surface)
+	wl_list_for_each(bar, &bar_list, link) {
+		if (bar->wl_surface == surface) {
+			seat->bar = bar;
 			break;
-	seat->bar = bar;
+		}
+	}
 
 	if (!cursor_image) {
 		struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24, shm);
@@ -605,7 +593,7 @@ pointer_motion(void *data, struct wl_pointer *pointer, uint32_t time,
 	       wl_fixed_t surface_x, wl_fixed_t surface_y)
 {
 	Seat *seat = (Seat *)data;
-
+	
 	seat->pointer_x = wl_fixed_to_int(surface_x);
 	seat->pointer_y = wl_fixed_to_int(surface_y);
 }
@@ -618,13 +606,12 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 	if (!seat->pointer_button || !seat->bar)
 		return;
 
-	uint32_t x = 0;
-	uint32_t i = 0;
+	uint32_t x = 0, i = 0;
 	do {
 		if (hide_vacant) {
-			bool active = seat->bar->mtags & 1 << i;
-			bool occupied = seat->bar->ctags & 1 << i;
-			bool urgent = seat->bar->urg & 1 << i;
+			const bool active = seat->bar->mtags & 1 << i;
+			const bool occupied = seat->bar->ctags & 1 << i;
+			const bool urgent = seat->bar->urg & 1 << i;
 			if (!active && !occupied && !urgent)
 				continue;
 		}
@@ -768,8 +755,8 @@ dwl_wm_monitor_selected(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *
 {
 	Bar *bar = (Bar *)data;
 
-	if (selected != bar->selmon) {
-		bar->selmon = selected;
+	if (selected != bar->sel) {
+		bar->sel = selected;
 		bar->redraw = true;
 	}
 }
@@ -819,6 +806,9 @@ static void
 dwl_wm_monitor_title(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
 		     const char *title)
 {
+	if (no_title)
+		return;
+	
 	Bar *bar = (Bar *)data;
 	
 	if (strcmp(bar->title, title) != 0) {
@@ -902,12 +892,6 @@ setup_bar(Bar *bar)
 }
 
 static void
-setup_seat(Seat *seat)
-{
-	wl_seat_add_listener(seat->wl_seat, &seat_listener, seat);
-}
-
-static void
 handle_global(void *data, struct wl_registry *registry,
 	      uint32_t name, const char *interface, uint32_t version)
 {
@@ -925,35 +909,28 @@ handle_global(void *data, struct wl_registry *registry,
 			znet_tapesoftware_dwl_wm_v1_add_listener(dwl_wm, &dwl_wm_listener, NULL);
 		}
 	} else if (!strcmp(interface, wl_output_interface.name)) {
-		Bar *bar = malloc(sizeof(Bar));
+		Bar *bar = calloc(1, sizeof(Bar));
 		if (!bar)
-			EDIE("malloc");
-		memset(bar, 0, sizeof(Bar));
+			EDIE("calloc");
 		bar->registry_name = name;
 		bar->wl_output = wl_registry_bind(registry, name, &wl_output_interface, 1);
-		DL_APPEND(bar_list, bar);
-		if (ready)
+		if (run_display)
 			setup_bar(bar);
+		wl_list_insert(&bar_list, &bar->link);
 	} else if (!strcmp(interface, wl_seat_interface.name)) {
-		Seat *seat = malloc(sizeof(Seat));
+		Seat *seat = calloc(1, sizeof(Seat));
 		if (!seat)
-			EDIE("malloc");
-		memset(seat, 0, sizeof(Seat));
+			EDIE("calloc");
 		seat->registry_name = name;
 		seat->wl_seat = wl_registry_bind(registry, name, &wl_seat_interface, 7);
-		DL_APPEND(seat_list, seat);
-		setup_seat(seat);
+		wl_seat_add_listener(seat->wl_seat, &seat_listener, seat);
+		wl_list_insert(&seat_list, &seat->link);
 	}
 }
 
 static void
 teardown_bar(Bar *bar)
 {
-	zxdg_output_v1_destroy(bar->xdg_output);
-	if (!bar->hidden) {
-		zwlr_layer_surface_v1_destroy(bar->layer_surface);
-		wl_surface_destroy(bar->wl_surface);
-	}
 	if (ipc)
 		znet_tapesoftware_dwl_wm_monitor_v1_destroy(bar->dwl_wm_monitor);
 	if (bar->xdg_output_name)
@@ -962,15 +939,21 @@ teardown_bar(Bar *bar)
 		free(bar->status_colors);
 	if (bar->status_buttons)
 		free(bar->status_buttons);
+	if (!bar->hidden) {
+		zwlr_layer_surface_v1_destroy(bar->layer_surface);
+		wl_surface_destroy(bar->wl_surface);
+	}
+	zxdg_output_v1_destroy(bar->xdg_output);
+	wl_output_destroy(bar->wl_output);
 	free(bar);
 }
 
 static void
 teardown_seat(Seat *seat)
 {
-	wl_seat_destroy(seat->wl_seat);
 	if (seat->wl_pointer)
 		wl_pointer_destroy(seat->wl_pointer);
+	wl_seat_destroy(seat->wl_seat);
 	free(seat);
 }
 
@@ -978,22 +961,21 @@ static void
 handle_global_remove(void *data, struct wl_registry *registry, uint32_t name)
 {
 	Bar *bar;
-	DL_FOREACH(bar_list, bar)
-		if (bar->registry_name == name)
-			break;
-	if (bar) {
-		DL_DELETE(bar_list, bar);
-		teardown_bar(bar);
-		return;
-	}
-
 	Seat *seat;
-	DL_FOREACH(seat_list, seat)
-		if (seat->registry_name == name)
-			break;
-	if (seat) {
-		DL_DELETE(seat_list, seat);
-		teardown_seat(seat);
+	
+	wl_list_for_each(bar, &bar_list, link) {
+		if (bar->registry_name == name) {
+			wl_list_remove(&bar->link);
+			teardown_bar(bar);
+			return;
+		}
+	}
+	wl_list_for_each(seat, &seat_list, link) {
+		if (seat->registry_name == name) {
+			wl_list_remove(&seat->link);
+			teardown_seat(seat);
+			return;
+		}
 	}
 }
 
@@ -1017,7 +999,7 @@ advance_word(char **beg, char **end)
 
 #define ADVANCE() advance_word(&wordbeg, &wordend)
 #define ADVANCE_IF_LAST_CONT() if (ADVANCE() == -1) continue
-#define ADVANCE_IF_LAST_BREAK() if (ADVANCE() == -1) break
+#define ADVANCE_IF_LAST_RET() if (ADVANCE() == -1) return
 
 static void
 read_stdin(void)
@@ -1051,11 +1033,13 @@ read_stdin(void)
 
 		ADVANCE_IF_LAST_CONT();
 
-		Bar *bar;
-		DL_FOREACH(bar_list, bar)
-			if (bar->xdg_output_name)
-				if (!strcmp(wordbeg, bar->xdg_output_name))
-					break;
+		Bar *it, *bar = NULL;
+		wl_list_for_each(it, &bar_list, link) {
+			if (it->xdg_output_name && !strcmp(wordbeg, it->xdg_output_name)) {
+				bar = it;
+				break;
+			}
+		}
 		if (!bar)
 			continue;
 		
@@ -1092,8 +1076,8 @@ read_stdin(void)
 			}
 		} else if (!strcmp(wordbeg, "selmon")) {
 			ADVANCE();
-			if ((val = atoi(wordbeg)) != bar->selmon) {
-				bar->selmon = val;
+			if ((val = atoi(wordbeg)) != bar->sel) {
+				bar->sel = val;
 				bar->redraw = true;
 			}
 		}
@@ -1283,132 +1267,134 @@ read_socket(void)
 		return;
 	sockbuf[len] = '\0';
 
-	do {
-		char *wordbeg, *wordend;
-		wordend = (char *)&sockbuf;
+	char *wordbeg, *wordend;
+	wordend = (char *)&sockbuf;
 
-		ADVANCE_IF_LAST_BREAK();
+	ADVANCE_IF_LAST_RET();
 		
-		Bar *bar;
-		bool all = false;
+	Bar *bar = NULL, *it;
+	bool all = false;
 		
-		if (!strcmp(wordbeg, "all")) {
-			all = true;
-		} else if (!strcmp(wordbeg, "selected")) {
-			DL_FOREACH(bar_list, bar)
-				if (bar->selmon)
-					break;
-		} else if (!strcmp(wordbeg, "first")) {
-			bar = bar_list;
-		} else {
-			DL_FOREACH(bar_list, bar)
-				if (bar->xdg_output_name)
-					if (!strcmp(wordbeg, bar->xdg_output_name))
-						break;
-		}
-		
-		if (!all && !bar)
-			break;
-
-		ADVANCE();
-
-		if (!strcmp(wordbeg, "status")) {
-			if (!wordend)
+	if (!strcmp(wordbeg, "all")) {
+		all = true;
+	} else if (!strcmp(wordbeg, "selected")) {
+		wl_list_for_each(it, &bar_list, link) {
+			if (it->sel) {
+				bar = it;
 				break;
-			if (all) {
-				if (!bar_list)
-					break;
-				set_status(bar_list, wordend);
-				bar_list->redraw = true;
+			}
+		}
+	} else {
+		wl_list_for_each(it, &bar_list, link) {
+			if (it->xdg_output_name && !strcmp(wordbeg, it->xdg_output_name)) {
+				bar = it;
+				break;
+			}
+		}
+	}
+		
+	if (!all && !bar)
+		return;
+	
+	ADVANCE();
 
-				/* Copy over parsed status information to other bars */
-				DL_FOREACH(bar_list->next, bar) {
-					snprintf(bar->status, sizeof bar->status, "%s", bar_list->status);
+	if (!strcmp(wordbeg, "status")) {
+		if (!*wordend)
+			return;
+		if (all) {
+			Bar *first = NULL;
+			wl_list_for_each(bar, &bar_list, link) {
+				if (first) {
+					/* Copy over parsed status information to other bars */
+					snprintf(bar->status, sizeof bar->status, "%s", first->status);
 					bar->status_colors_l = bar->status_buttons_l = 0;
-					for (uint32_t i = 0; i < bar_list->status_colors_l; i++) {
+					for (uint32_t i = 0; i < first->status_colors_l; i++) {
 						StatusColor *status_color;
 						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
-						status_color->color = bar_list->status_colors[i].color;
-						status_color->bg = bar_list->status_colors[i].bg;
-						status_color->start = bar_list->status_colors[i].start - (char *)&bar_list->status + (char *)&bar->status;
+						status_color->color = first->status_colors[i].color;
+						status_color->bg = first->status_colors[i].bg;
+						status_color->start = first->status_colors[i].start - (char *)&first->status + (char *)&bar->status;
 					}
-					for (uint32_t i = 0; i < bar_list->status_buttons_l; i++) {
+					for (uint32_t i = 0; i < first->status_buttons_l; i++) {
 						StatusButton *status_button;
 						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, status_button);
-						*status_button = bar_list->status_buttons[i];
+						*status_button = first->status_buttons[i];
 					}
-					bar->redraw = true;
+				} else {
+					set_status(bar, wordend);
+					first = bar;
 				}
-			} else {
-				set_status(bar, wordend);
 				bar->redraw = true;
 			}
-		} else if (!strcmp(wordbeg, "show")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (bar->hidden)
-						show_bar(bar);
-			} else {
+		} else {
+			set_status(bar, wordend);
+			bar->redraw = true;
+		}
+	} else if (!strcmp(wordbeg, "show")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (bar->hidden)
 					show_bar(bar);
-			}
-		} else if (!strcmp(wordbeg, "hide")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (!bar->hidden)
-						hide_bar(bar);
-			} else {
+		} else {
+			if (bar->hidden)
+				show_bar(bar);
+		}
+	} else if (!strcmp(wordbeg, "hide")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (!bar->hidden)
 					hide_bar(bar);
-			}
-		} else if (!strcmp(wordbeg, "toggle-visibility")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (bar->hidden)
-						show_bar(bar);
-					else
-						hide_bar(bar);
-			} else {
+		} else {
+			if (!bar->hidden)
+				hide_bar(bar);
+		}
+	} else if (!strcmp(wordbeg, "toggle-visibility")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (bar->hidden)
 					show_bar(bar);
 				else
 					hide_bar(bar);
-			}
-		} else if (!strcmp(wordbeg, "set-top")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (bar->bottom)
-						set_top(bar);
-						
-			} else {
+		} else {
+			if (bar->hidden)
+				show_bar(bar);
+			else
+				hide_bar(bar);
+		}
+	} else if (!strcmp(wordbeg, "set-top")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (bar->bottom)
 					set_top(bar);
-			}
-		} else if (!strcmp(wordbeg, "set-bottom")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (!bar->bottom)
-						set_bottom(bar);
 						
-			} else {
+		} else {
+			if (bar->bottom)
+				set_top(bar);
+		}
+	} else if (!strcmp(wordbeg, "set-bottom")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (!bar->bottom)
 					set_bottom(bar);
-			}
-		} else if (!strcmp(wordbeg, "toggle-location")) {
-			if (all) {
-				DL_FOREACH(bar_list, bar)
-					if (bar->bottom)
-						set_top(bar);
-					else
-						set_bottom(bar);
-			} else {
+						
+		} else {
+			if (!bar->bottom)
+				set_bottom(bar);
+		}
+	} else if (!strcmp(wordbeg, "toggle-location")) {
+		if (all) {
+			wl_list_for_each(bar, &bar_list, link)
 				if (bar->bottom)
 					set_top(bar);
 				else
 					set_bottom(bar);
-			}
+		} else {
+			if (bar->bottom)
+				set_top(bar);
+			else
+				set_bottom(bar);
 		}
-	} while (0);
+	}
 }
 
 static void
@@ -1442,7 +1428,7 @@ event_loop(void)
 			read_stdin();
 		
 		Bar *bar;
-		DL_FOREACH(bar_list, bar) {
+		wl_list_for_each(bar, &bar_list, link) {
 			if (bar->redraw) {
 				if (!bar->hidden)
 					draw_frame(bar);
@@ -1571,6 +1557,10 @@ main(int argc, char **argv)
 			status_commands = true;
 		} else if (!strcmp(argv[i], "-no-status-commands")) {
 			status_commands = false;
+		} else if (!strcmp(argv[i], "-no-title")) {
+			no_title = true;
+		} else if (!strcmp(argv[i], "-no-no-title")) {
+			no_title = false;
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
@@ -1643,6 +1633,9 @@ main(int argc, char **argv)
 	if (!display)
 		DIE("Failed to create display");
 
+	wl_list_init(&bar_list);
+	wl_list_init(&seat_list);
+	
 	struct wl_registry *registry = wl_display_get_registry(display);
 	wl_registry_add_listener(registry, &registry_listener, NULL);
 	wl_display_roundtrip(display);
@@ -1674,7 +1667,7 @@ main(int argc, char **argv)
 	}
 	
 	/* Setup bars */
-	DL_FOREACH(bar_list, bar)
+	wl_list_for_each(bar, &bar_list, link)
 		setup_bar(bar);
 	wl_display_roundtrip(display);
 
@@ -1688,16 +1681,21 @@ main(int argc, char **argv)
 			EDIE("malloc");
 		stdinbuf_cap = 1024;
 	}
-	
+
 	/* Set up socket */
-	for (uint32_t i = 0;; i++) {
+	bool found = false;
+	for (uint32_t i = 0; i < 50; i++) {
 		if ((sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
 			DIE("socket");
 		snprintf(sock_address.sun_path, sizeof sock_address.sun_path, "%s/dwlb-%i", socketdir, i);
-		if (connect(sock_fd, (struct sockaddr *)&sock_address, sizeof sock_address) == -1)
+		if (connect(sock_fd, (struct sockaddr *)&sock_address, sizeof sock_address) == -1) {
+			found = true;
 			break;
+		}
 		close(sock_fd);
 	}
+	if (!found)
+		DIE("Could not secure a socket path");
 
 	socketpath = (char *)&sock_address.sun_path;
 	unlink(socketpath);
@@ -1714,7 +1712,7 @@ main(int argc, char **argv)
 	signal(SIGCHLD, SIG_IGN);
 	
 	/* Run */
-	ready = true;
+	run_display = true;
 	event_loop();
 
 	/* Clean everything up */
@@ -1730,9 +1728,9 @@ main(int argc, char **argv)
 		free(tags);
 	}
 
-	DL_FOREACH_SAFE(bar_list, bar, bar2)
+	wl_list_for_each_safe(bar, bar2, &bar_list, link)
 		teardown_bar(bar);
-	DL_FOREACH_SAFE(seat_list, seat, seat2)
+	wl_list_for_each_safe(seat, seat2, &seat_list, link)
 		teardown_seat(seat);
 	
 	zwlr_layer_shell_v1_destroy(layer_shell);

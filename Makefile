@@ -18,43 +18,27 @@ WAYLAND_PROTOCOLS=$(shell pkg-config --variable=pkgdatadir wayland-protocols)
 WAYLAND_SCANNER=$(shell pkg-config --variable=wayland_scanner wayland-scanner)
 
 xdg-shell-protocol.h:
-	$(WAYLAND_SCANNER) client-header \
-		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
-
+	$(WAYLAND_SCANNER) client-header $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
 xdg-shell-protocol.c:
-	$(WAYLAND_SCANNER) private-code \
-		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
-
+	$(WAYLAND_SCANNER) private-code $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
 xdg-shell-protocol.o: xdg-shell-protocol.h
 
 xdg-output-unstable-v1-protocol.h:
-	$(WAYLAND_SCANNER) client-header \
-		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) client-header $(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
 xdg-output-unstable-v1-protocol.c:
-	$(WAYLAND_SCANNER) private-code \
-		$(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) private-code $(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml $@
 xdg-output-unstable-v1-protocol.o: xdg-output-unstable-v1-protocol.h
 
 wlr-layer-shell-unstable-v1-protocol.h:
-	$(WAYLAND_SCANNER) client-header \
-		protocols/wlr-layer-shell-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) client-header protocols/wlr-layer-shell-unstable-v1.xml $@
 wlr-layer-shell-unstable-v1-protocol.c:
-	$(WAYLAND_SCANNER) private-code \
-		protocols/wlr-layer-shell-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) private-code protocols/wlr-layer-shell-unstable-v1.xml $@
 wlr-layer-shell-unstable-v1-protocol.o: wlr-layer-shell-unstable-v1-protocol.h
 
 net-tapesoftware-dwl-wm-unstable-v1-protocol.h:
-	$(WAYLAND_SCANNER) client-header \
-		protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) client-header protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
 net-tapesoftware-dwl-wm-unstable-v1-protocol.c:
-	$(WAYLAND_SCANNER) private-code \
-		protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
-
+	$(WAYLAND_SCANNER) private-code protocols/net-tapesoftware-dwl-wm-unstable-v1.xml $@
 net-tapesoftware-dwl-wm-unstable-v1-protocol.o: net-tapesoftware-dwl-wm-unstable-v1-protocol.h
 
 dwlb.o: utf8.h config.h xdg-shell-protocol.h xdg-output-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h net-tapesoftware-dwl-wm-unstable-v1-protocol.o
