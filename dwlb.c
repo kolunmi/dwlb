@@ -80,8 +80,10 @@
 	"	-no-hide-vacant-tags		display empty and inactive tags\n" \
 	"	-status-commands		enable in-line commands in status text\n" \
 	"	-no-status-commands		disable in-line commands in status text\n" \
-	"	-no-title			do not display current window title\n" \
-	"	-no-no-title			display current window title\n" \
+	"	-center-title			center title text on bar\n" \
+	"	-no-center-title		do not center title text on bar\n" \
+	"	-custom-title			do not display window title and treat the area as another status text element; see -title command\n" \
+	"	-no-custom-title		display current window title as normal\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names\n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
@@ -93,6 +95,7 @@
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
+	"	-title	[OUTPUT] [TEXT]		set title text, if -custom-title is enabled\n"	\
 	"	-show [OUTPUT]			show bar\n"		\
 	"	-hide [OUTPUT]			hide bar\n"		\
 	"	-toggle-visibility [OUTPUT]	toggle bar visibility\n" \
@@ -107,14 +110,22 @@ typedef struct {
 	pixman_color_t color;
 	bool bg;
 	char *start;
-} StatusColor;
+} Color;
 
 typedef struct {
 	uint32_t btn;
 	uint32_t x1;
 	uint32_t x2;
 	char command[128];
-} StatusButton;
+} Button;
+
+typedef struct {
+	char text[2048];
+	Color *colors;
+	uint32_t colors_l, colors_c;
+	Button *buttons;
+	uint32_t buttons_l, buttons_c;
+} CustomText;
 
 typedef struct {
 	struct wl_output *wl_output;
@@ -132,14 +143,9 @@ typedef struct {
 	uint32_t stride, bufsize;
 	
 	uint32_t mtags, ctags, urg, sel;
-	char layout[32];
+	char *layout, *window_title;
 	uint32_t layout_idx, last_layout_idx;
-	char title[1024], status[1024];
-	
-	StatusColor *status_colors;
-	uint32_t status_colors_l, status_colors_c;
-	StatusButton *status_buttons;
-	uint32_t status_buttons_l, status_buttons_c;
+	CustomText title, status;
 
 	bool hidden, bottom;
 	bool redraw;
@@ -230,7 +236,7 @@ draw_text(char *text,
 	  uint32_t max_x,
 	  uint32_t buf_height,
 	  uint32_t padding,
-	  StatusColor *colors,
+	  Color *colors,
 	  uint32_t colors_l)
 {
 	if (!text || !*text || !max_x)
@@ -413,19 +419,34 @@ draw_frame(Bar *bar)
 		      &inactive_fg_color, &inactive_bg_color, bar->width,
 		      bar->height, bar->textpadding, NULL, 0);
 	
-	uint32_t status_width = TEXT_WIDTH(bar->status, bar->width - x, bar->textpadding);
-	draw_text(bar->status, bar->width - status_width, y, foreground,
+	uint32_t status_width = TEXT_WIDTH(bar->status.text, bar->width - x, bar->textpadding);
+	draw_text(bar->status.text, bar->width - status_width, y, foreground,
 		  background, &inactive_fg_color, &inactive_bg_color,
 		  bar->width, bar->height, bar->textpadding,
-		  bar->status_colors, bar->status_colors_l);
+		  bar->status.colors, bar->status.colors_l);
 
-	if (!no_title) {
-		x = draw_text(bar->title, x, y, foreground, background,
-			      bar->sel ? &active_fg_color : &inactive_fg_color,
-			      bar->sel ? &active_bg_color : &inactive_bg_color,
-			      bar->width - status_width, bar->height, bar->textpadding,
-			      NULL, 0);
+	uint32_t nx;
+	if (center_title) {
+		uint32_t title_width = TEXT_WIDTH(custom_title ? bar->title.text : bar->window_title, bar->width - status_width - x, 0);
+		nx = MAX(x, MIN((bar->width - title_width) / 2, bar->width - status_width - title_width));
+	} else {
+		nx = MIN(x + bar->textpadding, bar->width - status_width);
 	}
+	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
+				bar->sel ? &active_bg_color : &inactive_bg_color, 1,
+				&(pixman_box32_t){
+					.x1 = x, .x2 = nx,
+					.y1 = 0, .y2 = bar->height
+				});
+	x = nx;
+	
+	x = draw_text(custom_title ? bar->title.text : bar->window_title,
+		      x, y, foreground, background,
+		      bar->sel ? &active_fg_color : &inactive_fg_color,
+		      bar->sel ? &active_bg_color : &inactive_bg_color,
+		      bar->width - status_width, bar->height, 0,
+		      custom_title ? bar->title.colors : NULL,
+		      custom_title ? bar->title.colors_l : 0);
 
 	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
 				bar->sel ? &active_bg_color : &inactive_bg_color, 1,
@@ -637,17 +658,32 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 				znet_tapesoftware_dwl_wm_monitor_v1_set_layout(seat->bar->dwl_wm_monitor, 2);
 		}
 	} else {
-		uint32_t status_x = seat->bar->width - TEXT_WIDTH(seat->bar->status, seat->bar->width - x, seat->bar->textpadding);
+		uint32_t status_x = seat->bar->width - TEXT_WIDTH(seat->bar->status.text, seat->bar->width - x, seat->bar->textpadding);
 		if (seat->pointer_x < status_x) {
 			/* Clicked on title */
-			
+			if (custom_title) {
+				if (center_title) {
+					uint32_t title_width = TEXT_WIDTH(seat->bar->title.text, status_x - x, 0);
+					x = MAX(x, MIN((seat->bar->width - title_width) / 2, status_x - title_width));
+				} else {
+					x = MIN(x + seat->bar->textpadding, status_x);
+				}
+				for (i = 0; i < seat->bar->title.buttons_l; i++) {
+					if (seat->pointer_button == seat->bar->title.buttons[i].btn
+					    && seat->pointer_x >= x + seat->bar->title.buttons[i].x1
+					    && seat->pointer_x < x + seat->bar->title.buttons[i].x2) {
+						shell_command(seat->bar->title.buttons[i].command);
+						break;
+					}
+				}
+			}
 		} else {
 			/* Clicked on status */
-			for (i = 0; i < seat->bar->status_buttons_l; i++) {
-				if (seat->pointer_button == seat->bar->status_buttons[i].btn
-				    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status_buttons[i].x1
-				    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status_buttons[i].x2) {
-					shell_command(seat->bar->status_buttons[i].command);
+			for (i = 0; i < seat->bar->status.buttons_l; i++) {
+				if (seat->pointer_button == seat->bar->status.buttons[i].btn
+				    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x1
+				    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x2) {
+					shell_command(seat->bar->status.buttons[i].command);
 					break;
 				}
 			}
@@ -794,27 +830,26 @@ dwl_wm_monitor_layout(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dw
 {
 	Bar *bar = (Bar *)data;
 
-	if (strcmp(bar->layout, layouts[layout]) != 0) {
-		snprintf(bar->layout, sizeof bar->layout, "%s", layouts[layout]);
-		bar->last_layout_idx = bar->layout_idx;
-		bar->layout_idx = layout;
-		bar->redraw = true;
-	}
+	bar->layout = layouts[layout];
+	bar->last_layout_idx = bar->layout_idx;
+	bar->layout_idx = layout;
+	bar->redraw = true;
 }
 
 static void
 dwl_wm_monitor_title(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
 		     const char *title)
 {
-	if (no_title)
+	if (custom_title)
 		return;
-	
+
 	Bar *bar = (Bar *)data;
-	
-	if (strcmp(bar->title, title) != 0) {
-		snprintf(bar->title, sizeof bar->title, "%s", title);
-		bar->redraw = true;
-	}
+
+	if (bar->window_title)
+		free(bar->window_title);
+	if (!(bar->window_title = strdup(title)))
+		EDIE("strdup");
+	bar->redraw = true;
 }
 
 static void
@@ -872,9 +907,6 @@ setup_bar(Bar *bar)
 	bar->bottom = bottom;
 	bar->hidden = hidden;
 
-	if (!ipc)
-		snprintf(bar->layout, sizeof bar->layout, "[]=");
-		
 	bar->xdg_output = zxdg_output_manager_v1_get_xdg_output(output_manager, bar->wl_output);
 	if (!bar->xdg_output)
 		DIE("Could not create xdg_output");
@@ -931,14 +963,20 @@ handle_global(void *data, struct wl_registry *registry,
 static void
 teardown_bar(Bar *bar)
 {
+	if (bar->status.colors)
+		free(bar->status.colors);
+	if (bar->status.buttons)
+		free(bar->status.buttons);
+	if (bar->title.colors)
+		free(bar->title.colors);
+	if (bar->title.buttons)
+		free(bar->title.buttons);
+	if (!ipc && bar->layout)
+		free(bar->layout);
 	if (ipc)
 		znet_tapesoftware_dwl_wm_monitor_v1_destroy(bar->dwl_wm_monitor);
 	if (bar->xdg_output_name)
 		free(bar->xdg_output_name);
-	if (bar->status_colors)
-		free(bar->status_colors);
-	if (bar->status_buttons)
-		free(bar->status_buttons);
 	if (!bar->hidden) {
 		zwlr_layer_surface_v1_destroy(bar->layer_surface);
 		wl_surface_destroy(bar->wl_surface);
@@ -1065,15 +1103,19 @@ read_stdin(void)
 				bar->redraw = true;
 			}
 		} else if (!strcmp(wordbeg, "layout")) {
-			if (strcmp(bar->layout, wordend) != 0) {
-				snprintf(bar->layout, sizeof bar->layout, "%s", wordend);
-				bar->redraw = true;
-			}
+			if (bar->layout)
+				free(bar->layout);
+			if (!(bar->layout = strdup(wordend)))
+				EDIE("strdup");
+			bar->redraw = true;
 		} else if (!strcmp(wordbeg, "title")) {
-			if (strcmp(bar->title, wordend) != 0) {
-				snprintf(bar->title, sizeof bar->title, "%s", wordend);
-				bar->redraw = true;
-			}
+			if (custom_title)
+				continue;
+			if (bar->window_title)
+				free(bar->window_title);
+			if (!(bar->window_title = strdup(wordend)))
+				EDIE("strdup");
+			bar->redraw = true;
 		} else if (!strcmp(wordbeg, "selmon")) {
 			ADVANCE();
 			if ((val = atoi(wordbeg)) != bar->sel) {
@@ -1140,9 +1182,9 @@ parse_color(const char *str, pixman_color_t *clr)
 }
 
 static void
-set_status(Bar *bar, char *text)
+parse_into_customtext(CustomText *ct, char *text)
 {
-	bar->status_colors_l = bar->status_buttons_l = 0;
+	ct->colors_l = ct->buttons_l = 0;
 
 	if (status_commands) {
 		uint32_t codepoint;
@@ -1151,11 +1193,11 @@ set_status(Bar *bar, char *text)
 		uint32_t x = 0;
 		size_t str_pos = 0;
 
-		StatusButton *left_button = NULL;
-		StatusButton *middle_button = NULL;
-		StatusButton *right_button = NULL;
+		Button *left_button = NULL;
+		Button *middle_button = NULL;
+		Button *right_button = NULL;
 	
-		for (char *p = text; *p && str_pos < sizeof(bar->status) - 1; p++) {
+		for (char *p = text; *p && str_pos < sizeof(ct->text) - 1; p++) {
 			if (state == UTF8_ACCEPT && *p == '^') {
 				p++;
 				if (*p != '^') {
@@ -1166,29 +1208,29 @@ set_status(Bar *bar, char *text)
 					*end = '\0';
 				
 					if (!strcmp(p, "bg")) {
-						StatusColor *status_color;
-						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
+						Color *color;
+						ARRAY_APPEND(ct->colors, ct->colors_l, ct->colors_c, color);
 						if (!*arg)
-							status_color->color = inactive_bg_color;
+							color->color = inactive_bg_color;
 						else
-							parse_color(arg, &status_color->color);
-						status_color->bg = true;
-						status_color->start = bar->status + str_pos;
+							parse_color(arg, &color->color);
+						color->bg = true;
+						color->start = ct->text + str_pos;
 					} else if (!strcmp(p, "fg")) {
-						StatusColor *status_color;
-						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
+						Color *color;
+						ARRAY_APPEND(ct->colors, ct->colors_l, ct->colors_c, color);
 						if (!*arg)
-							status_color->color = inactive_fg_color;
+							color->color = inactive_fg_color;
 						else
-							parse_color(arg, &status_color->color);
-						status_color->bg = false;
-						status_color->start = bar->status + str_pos;
+							parse_color(arg, &color->color);
+						color->bg = false;
+						color->start = ct->text + str_pos;
 					} else if (!strcmp(p, "lm")) {
 						if (left_button) {
 							left_button->x2 = x;
 							left_button = NULL;
 						} else if (*arg) {
-							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, left_button);
+							ARRAY_APPEND(ct->buttons, ct->buttons_l, ct->buttons_c, left_button);
 							left_button->btn = BTN_LEFT;
 							snprintf(left_button->command, sizeof left_button->command, "%s", arg);
 							left_button->x1 = x;
@@ -1198,7 +1240,7 @@ set_status(Bar *bar, char *text)
 							middle_button->x2 = x;
 							middle_button = NULL;
 						} else if (*arg) {
-							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, middle_button);
+							ARRAY_APPEND(ct->buttons, ct->buttons_l, ct->buttons_c, middle_button);
 							middle_button->btn = BTN_MIDDLE;
 							snprintf(middle_button->command, sizeof middle_button->command, "%s", arg);
 							middle_button->x1 = x;
@@ -1208,7 +1250,7 @@ set_status(Bar *bar, char *text)
 							right_button->x2 = x;
 							right_button = NULL;
 						} else if (*arg) {
-							ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, right_button);
+							ARRAY_APPEND(ct->buttons, ct->buttons_l, ct->buttons_c, right_button);
 							right_button->btn = BTN_RIGHT;
 							snprintf(right_button->command, sizeof right_button->command, "%s", arg);
 							right_button->x1 = x;
@@ -1223,7 +1265,7 @@ set_status(Bar *bar, char *text)
 				}
 			}
 
-			bar->status[str_pos++] = *p;
+			ct->text[str_pos++] = *p;
 			
 			if (utf8decode(&state, &codepoint, *p))
 				continue;
@@ -1247,9 +1289,28 @@ set_status(Bar *bar, char *text)
 		if (right_button)
 			right_button->x2 = x;
 		
-		bar->status[str_pos] = '\0';
+		ct->text[str_pos] = '\0';
 	} else {
-		snprintf(bar->status, sizeof bar->status, "%s", text);
+		snprintf(ct->text, sizeof ct->text, "%s", text);
+	}
+}
+
+static void
+copy_customtext(CustomText *from, CustomText *to)
+{
+	snprintf(to->text, sizeof to->text, "%s", from->text);
+	to->colors_l = to->buttons_l = 0;
+	for (uint32_t i = 0; i < from->colors_l; i++) {
+		Color *color;
+		ARRAY_APPEND(to->colors, to->colors_l, to->colors_c, color);
+		color->color = from->colors[i].color;
+		color->bg = from->colors[i].bg;
+		color->start = from->colors[i].start - (char *)&from->text + (char *)&to->text;
+	}
+	for (uint32_t i = 0; i < from->buttons_l; i++) {
+		Button *button;
+		ARRAY_APPEND(to->buttons, to->buttons_l, to->buttons_c, button);
+		*button = from->buttons[i];
 	}
 }
 
@@ -1305,29 +1366,33 @@ read_socket(void)
 			Bar *first = NULL;
 			wl_list_for_each(bar, &bar_list, link) {
 				if (first) {
-					/* Copy over parsed status information to other bars */
-					snprintf(bar->status, sizeof bar->status, "%s", first->status);
-					bar->status_colors_l = bar->status_buttons_l = 0;
-					for (uint32_t i = 0; i < first->status_colors_l; i++) {
-						StatusColor *status_color;
-						ARRAY_APPEND(bar->status_colors, bar->status_colors_l, bar->status_colors_c, status_color);
-						status_color->color = first->status_colors[i].color;
-						status_color->bg = first->status_colors[i].bg;
-						status_color->start = first->status_colors[i].start - (char *)&first->status + (char *)&bar->status;
-					}
-					for (uint32_t i = 0; i < first->status_buttons_l; i++) {
-						StatusButton *status_button;
-						ARRAY_APPEND(bar->status_buttons, bar->status_buttons_l, bar->status_buttons_c, status_button);
-						*status_button = first->status_buttons[i];
-					}
+					copy_customtext(&first->status, &bar->status);
 				} else {
-					set_status(bar, wordend);
+					parse_into_customtext(&bar->status, wordend);
 					first = bar;
 				}
 				bar->redraw = true;
 			}
 		} else {
-			set_status(bar, wordend);
+			parse_into_customtext(&bar->status, wordend);
+			bar->redraw = true;
+		}
+	} else if (!strcmp(wordbeg, "title")) {
+		if (!custom_title || !*wordend)
+			return;
+		if (all) {
+			Bar *first = NULL;
+			wl_list_for_each(bar, &bar_list, link) {
+				if (first) {
+					copy_customtext(&first->title, &bar->title);
+				} else {
+					parse_into_customtext(&bar->title, wordend);
+					first = bar;
+				}
+				bar->redraw = true;
+			}
+		} else {
+			parse_into_customtext(&bar->title, wordend);
 			bar->redraw = true;
 		}
 	} else if (!strcmp(wordbeg, "show")) {
@@ -1507,6 +1572,11 @@ main(int argc, char **argv)
 				DIE("Option -status requires two arguments");
 			client_send_command(&sock_address, argv[i], "status", argv[i + 1]);
 			return 0;
+		} else if (!strcmp(argv[i], "-title")) {
+			if (++i + 1 >= argc)
+				DIE("Option -title requires two arguments");
+			client_send_command(&sock_address, argv[i], "title", argv[i + 1]);
+			return 0;
 		} else if (!strcmp(argv[i], "-show")) {
 			if (++i >= argc)
 				DIE("Option -show requires an argument");
@@ -1557,10 +1627,14 @@ main(int argc, char **argv)
 			status_commands = true;
 		} else if (!strcmp(argv[i], "-no-status-commands")) {
 			status_commands = false;
-		} else if (!strcmp(argv[i], "-no-title")) {
-			no_title = true;
-		} else if (!strcmp(argv[i], "-no-no-title")) {
-			no_title = false;
+		} else if (!strcmp(argv[i], "-center-title")) {
+			center_title = true;
+		} else if (!strcmp(argv[i], "-no-center-title")) {
+			center_title = false;
+		} else if (!strcmp(argv[i], "-custom-title")) {
+			custom_title = true;
+		} else if (!strcmp(argv[i], "-no-custom-title")) {
+			custom_title = false;
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
@@ -1726,6 +1800,11 @@ main(int argc, char **argv)
 		for (uint32_t i = 0; i < tags_l; i++)
 			free(tags[i]);
 		free(tags);
+	}
+	if (layouts) {
+		for (uint32_t i = 0; i < layouts_l; i++)
+			free(layouts[i]);
+		free(layouts);
 	}
 
 	wl_list_for_each_safe(bar, bar2, &bar_list, link)

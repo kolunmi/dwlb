@@ -1,14 +1,21 @@
 // use ipc functionality
 static bool ipc = false;
-
-// bar properties
+// initially hide all bars
 static bool hidden = false;
+// initially draw all bars at the bottom
 static bool bottom = false;
+// hide vacant tags
 static bool hide_vacant = false;
-
+// vertical pixel padding above and below text
+static uint32_t vertical_padding = 1;
+// allow in-line color commands in status text
+static bool status_commands = true;
+// center title text
+static bool center_title = false;
+// use title space as status text element
+static bool custom_title = false;
 // font
 static char *fontstr = "monospace:size=16";
-
 // tag names if ipc is disabled
 static char *tags_noipc[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
@@ -21,12 +28,3 @@ static pixman_color_t inactive_fg_color = { .red = 0xbbbb, .green = 0xbbbb, .blu
 static pixman_color_t inactive_bg_color = { .red = 0x2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
 static pixman_color_t urgent_fg_color = { .red = 0x2222, .green = 0x2222, .blue = 0x2222, .alpha = 0xffff, };
 static pixman_color_t urgent_bg_color = { .red = 0xeeee, .green = 0xeeee, .blue = 0xeeee, .alpha = 0xffff, };
-
-// vertical pixel padding above and below text
-static uint32_t vertical_padding = 1;
-
-// allow in-line color commands in status text
-static bool status_commands = true;
-
-// do not display current window title
-static bool no_title = false;
