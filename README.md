@@ -34,7 +34,7 @@ If dwl is [patched](https://lists.sr.ht/~raphi/public-inbox/patches/39166) appro
 Command options send instructions to existing instances of dwlb. All commands take at least one argument to specify a bar on which to operate. This may be zxdg_output_v1 name, "all" to affect all outputs, or "selected" for the current output.
 
 ### Status Text
-The `-status` command is used to write status text. The text may contain in-line commands in the following format: `^cmd(argument)`.
+The `-status` and `-title` commands are used to write status text. The text may contain in-line commands in the following format: `^cmd(argument)`.
 
 | In-Line Command     | Description                                                                 |
 |---------------------|-----------------------------------------------------------------------------|
@@ -53,6 +53,12 @@ A color command with no argument reverts to the default value. `^^` represents a
 
 ## Other Options
 Run `dwlb -h` for a full list of options.
+
+## Someblocks
+To use someblocks, or any program that outputs to stdout, with dwlb, use this one-liner:
+```bash
+someblocks -p | while read -r line; do dwlb -status all "$line"; done
+```
 
 ## Acknowledgements
 * [dtao](https://github.com/djpohly/dtao)
