@@ -14,6 +14,8 @@ static bool status_commands = true;
 static bool center_title = false;
 // use title space as status text element
 static bool custom_title = false;
+// scale
+static uint32_t buffer_scale = 1;
 // font
 static char *fontstr = "monospace:size=16";
 // tag names if ipc is disabled

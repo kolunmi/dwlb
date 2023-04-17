@@ -190,7 +190,7 @@ static char **layouts;
 static uint32_t layouts_l, layouts_c;
 
 static struct fcft_font *font;
-static uint32_t height, textpadding;
+static uint32_t height, textpadding, buffer_scale;
 
 static bool run_display;
 
@@ -465,6 +465,7 @@ draw_frame(Bar *bar)
 	
 	munmap(data, bar->bufsize);
 
+	wl_surface_set_buffer_scale(bar->wl_surface, buffer_scale);
 	wl_surface_attach(bar->wl_surface, buffer, 0, 0);
 	wl_surface_damage_buffer(bar->wl_surface, 0, 0, bar->width, bar->height);
 	wl_surface_commit(bar->wl_surface);
@@ -477,6 +478,9 @@ static void
 layer_surface_configure(void *data, struct zwlr_layer_surface_v1 *surface,
 			uint32_t serial, uint32_t w, uint32_t h)
 {
+	w = w * buffer_scale;
+	h = h * buffer_scale;
+
 	zwlr_layer_surface_v1_ack_configure(surface, serial);
 	
 	Bar *bar = (Bar *)data;
@@ -1719,10 +1723,14 @@ main(int argc, char **argv)
 	/* Load selected font */
 	fcft_init(FCFT_LOG_COLORIZE_AUTO, 0, FCFT_LOG_CLASS_ERROR);
 	fcft_set_scaling_filter(FCFT_SCALING_FILTER_LANCZOS3);
-	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, NULL)))
+
+	unsigned int dpi = 96 * buffer_scale;
+	char buf[10];
+	snprintf(buf, sizeof buf, "dpi=%u", dpi);
+	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, buf)))
 		DIE("Could not load font");
 	textpadding = font->height / 2;
-	height = font->height + vertical_padding * 2;
+	height = font->height / buffer_scale + vertical_padding * 2;
 
 	/* Configure tag names */
 	if (ipc && tags) {
