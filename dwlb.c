@@ -640,7 +640,7 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 			if (!active && !occupied && !urgent)
 				continue;
 		}
-		x += TEXT_WIDTH(tags[i], seat->bar->width - x, seat->bar->textpadding);
+		x += TEXT_WIDTH(tags[i], seat->bar->width - x, seat->bar->textpadding) / buffer_scale;
 	} while (seat->pointer_x >= x && ++i < tags_l);
 	
 	if (i < tags_l) {
