@@ -882,12 +882,12 @@ show_bar(Bar *bar)
 		DIE("Could not create layer_surface");
 	zwlr_layer_surface_v1_add_listener(bar->layer_surface, &layer_surface_listener, bar);
 
-	zwlr_layer_surface_v1_set_size(bar->layer_surface, 0, bar->height);
+	zwlr_layer_surface_v1_set_size(bar->layer_surface, 0, bar->height / buffer_scale);
 	zwlr_layer_surface_v1_set_anchor(bar->layer_surface,
 					 (bar->bottom ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP)
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
 					 | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-	zwlr_layer_surface_v1_set_exclusive_zone(bar->layer_surface, bar->height);
+	zwlr_layer_surface_v1_set_exclusive_zone(bar->layer_surface, bar->height / buffer_scale);
 	wl_surface_commit(bar->wl_surface);
 
 	bar->hidden = false;
@@ -906,7 +906,7 @@ hide_bar(Bar *bar)
 static void
 setup_bar(Bar *bar)
 {
-	bar->height = height;
+	bar->height = height * buffer_scale;
 	bar->textpadding = textpadding;
 	bar->bottom = bottom;
 	bar->hidden = hidden;
