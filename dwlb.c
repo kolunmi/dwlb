@@ -1696,6 +1696,10 @@ main(int argc, char **argv)
 					EDIE("strdup");
 			tags_l = tags_c = v;
 			i += v;
+		} else if (!strcmp(argv[i], "-scale")) {
+			if (++i >= argc)
+				DIE("Option -scale requires an argument");
+			buffer_scale = strtoul(argv[i], &argv[i] + strlen(argv[i]), 10);
 		} else if (!strcmp(argv[i], "-v")) {
 			fprintf(stderr, PROGRAM " " VERSION "\n");
 			return 0;
