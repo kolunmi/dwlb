@@ -93,6 +93,7 @@
 	"	-inactive-fg-color [COLOR]	specify background color of inactive tags or monitors\n" \
 	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
+	"	-scale [BUFFER_SCALE]		specify buffer scale value for integer scaling\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
 	"	-title	[OUTPUT] [TEXT]		set title text, if -custom-title is enabled\n"	\
