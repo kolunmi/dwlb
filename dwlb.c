@@ -89,6 +89,8 @@
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
+	"	-occupied-fg-color [COLOR]	specify text color of occupied tags\n" \
+	"	-occupied-bg-color [COLOR]	specify background color of occupied tags\n" \
 	"	-inactive-fg-color [COLOR]	specify text color of inactive tags or monitors\n" \
 	"	-inactive-bg-color [COLOR]	specify background color of inactive tags or monitors\n" \
 	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
@@ -392,8 +394,8 @@ draw_frame(Bar *bar)
 		if (hide_vacant && !active && !occupied && !urgent)
 			continue;
 
-		pixman_color_t *fg_color = urgent ? &urgent_fg_color : (active ? &active_fg_color : &inactive_fg_color);
-		pixman_color_t *bg_color = urgent ? &urgent_bg_color : (active ? &active_bg_color : &inactive_bg_color);
+		pixman_color_t *fg_color = urgent ? &urgent_fg_color : (active ? &active_fg_color : (occupied ? &occupied_fg_color : &inactive_fg_color));
+		pixman_color_t *bg_color = urgent ? &urgent_bg_color : (active ? &active_bg_color : (occupied ? &occupied_bg_color : &inactive_bg_color));
 		
 		if (!hide_vacant && occupied) {
 			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
@@ -1658,6 +1660,16 @@ main(int argc, char **argv)
 			if (++i >= argc)
 				DIE("Option -active-bg-color requires an argument");
 			if (parse_color(argv[i], &active_bg_color) == -1)
+				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-occupied-fg-color")) {
+			if (++i >= argc)
+				DIE("Option -occupied-fg-color requires an argument");
+			if (parse_color(argv[i], &occupied_fg_color) == -1)
+				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-occupied-bg-color")) {
+			if (++i >= argc)
+				DIE("Option -occupied-bg-color requires an argument");
+			if (parse_color(argv[i], &occupied_bg_color) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-inactive-fg-color")) {
 			if (++i >= argc)
