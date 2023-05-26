@@ -664,7 +664,7 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 				znet_tapesoftware_dwl_wm_monitor_v1_set_layout(seat->bar->dwl_wm_monitor, 2);
 		}
 	} else {
-		uint32_t status_x = seat->bar->width - TEXT_WIDTH(seat->bar->status.text, seat->bar->width - x, seat->bar->textpadding);
+		uint32_t status_x = seat->bar->width / buffer_scale - TEXT_WIDTH(seat->bar->status.text, seat->bar->width - x, seat->bar->textpadding) / buffer_scale;
 		if (seat->pointer_x < status_x) {
 			/* Clicked on title */
 			if (custom_title) {
@@ -687,8 +687,8 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 			/* Clicked on status */
 			for (i = 0; i < seat->bar->status.buttons_l; i++) {
 				if (seat->pointer_button == seat->bar->status.buttons[i].btn
-				    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x1
-				    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x2) {
+				    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x1 / buffer_scale
+				    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x2 / buffer_scale) {
 					shell_command(seat->bar->status.buttons[i].command);
 					break;
 				}
