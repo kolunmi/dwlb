@@ -64,7 +64,7 @@ Run `dwlb -h` for a full list of options.
 ## Someblocks
 To use someblocks, or any program that outputs to stdout, with dwlb, use this one-liner:
 ```bash
-someblocks -p | while read -r line; do dwlb -status all "$line"; done
+someblocks -p | dwlb -status-stdin all
 ```
 
 ## Acknowledgements

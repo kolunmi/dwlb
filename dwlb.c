@@ -96,6 +96,7 @@
 	"	-scale [BUFFER_SCALE]		specify buffer scale value for integer scaling\n" \
 	"Commands\n"							\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
+	"	-status-stdin	[OUTPUT]		set status text from stdin\n"	\
 	"	-title	[OUTPUT] [TEXT]		set title text, if -custom-title is enabled\n"	\
 	"	-show [OUTPUT]			show bar\n"		\
 	"	-hide [OUTPUT]			hide bar\n"		\
@@ -106,6 +107,8 @@
 	"Other\n"							\
 	"	-v				get version information\n" \
 	"	-h				view this help text\n"
+
+#define TEXT_MAX 2048
 
 typedef struct {
 	pixman_color_t color;
@@ -121,7 +124,7 @@ typedef struct {
 } Button;
 
 typedef struct {
-	char text[2048];
+	char text[TEXT_MAX];
 	Color *colors;
 	uint32_t colors_l, colors_c;
 	Button *buttons;
@@ -1577,6 +1580,16 @@ main(int argc, char **argv)
 			if (++i + 1 >= argc)
 				DIE("Option -status requires two arguments");
 			client_send_command(&sock_address, argv[i], "status", argv[i + 1]);
+			return 0;
+		} else if (!strcmp(argv[i], "-status-stdin")) {
+			if (++i >= argc)
+				DIE("Option -status-stdin requires an argument");
+			char *status = malloc(TEXT_MAX * sizeof(char));
+			while (fgets(status, TEXT_MAX-1, stdin)) {
+				status[strlen(status)-1] = '\0';
+				client_send_command(&sock_address, argv[i], "status", status);
+			}
+			free(status);
 			return 0;
 		} else if (!strcmp(argv[i], "-title")) {
 			if (++i + 1 >= argc)
