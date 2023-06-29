@@ -90,7 +90,7 @@
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
 	"	-inactive-fg-color [COLOR]	specify text color of inactive tags or monitors\n" \
-	"	-inactive-fg-color [COLOR]	specify background color of inactive tags or monitors\n" \
+	"	-inactive-bg-color [COLOR]	specify background color of inactive tags or monitors\n" \
 	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
 	"	-scale [BUFFER_SCALE]		specify buffer scale value for integer scaling\n" \
