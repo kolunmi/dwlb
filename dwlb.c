@@ -25,7 +25,7 @@
 #include "xdg-shell-protocol.h"
 #include "xdg-output-unstable-v1-protocol.h"
 #include "wlr-layer-shell-unstable-v1-protocol.h"
-#include "net-tapesoftware-dwl-wm-unstable-v1-protocol.h"
+#include "dwl-ipc-unstable-v2-protocol.h"
 
 #define DIE(fmt, ...)						\
 	do {							\
@@ -133,7 +133,7 @@ typedef struct {
 	struct wl_surface *wl_surface;
 	struct zwlr_layer_surface_v1 *layer_surface;
 	struct zxdg_output_v1 *xdg_output;
-	struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor;
+	struct zdwl_ipc_output_v2 *dwl_wm_output;
 
 	uint32_t registry_name;
 	char *xdg_output_name;
@@ -179,7 +179,7 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct zwlr_layer_shell_v1 *layer_shell;
 static struct zxdg_output_manager_v1 *output_manager;
-static struct znet_tapesoftware_dwl_wm_v1 *dwl_wm;
+static struct zdwl_ipc_manager_v2 *dwl_wm;
 static struct wl_cursor_image *cursor_image;
 static struct wl_surface *cursor_surface;
 
@@ -649,19 +649,19 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 		/* Clicked on tags */
 		if (ipc) {
 			if (seat->pointer_button == BTN_LEFT)
-				znet_tapesoftware_dwl_wm_monitor_v1_set_tags(seat->bar->dwl_wm_monitor, 1 << i, 1);
+				zdwl_ipc_output_v2_set_tags(seat->bar->dwl_wm_output, 1 << i, 1);
 			else if (seat->pointer_button == BTN_MIDDLE)
-				znet_tapesoftware_dwl_wm_monitor_v1_set_tags(seat->bar->dwl_wm_monitor, ~0, 1 << i);
+				zdwl_ipc_output_v2_set_tags(seat->bar->dwl_wm_output, ~0, 1);
 			else if (seat->pointer_button == BTN_RIGHT)
-				znet_tapesoftware_dwl_wm_monitor_v1_set_tags(seat->bar->dwl_wm_monitor, 0, 1 << i);
+				zdwl_ipc_output_v2_set_tags(seat->bar->dwl_wm_output, seat->bar->mtags ^ (1 << i), 0);
 		}
 	} else if (seat->pointer_x < (x += TEXT_WIDTH(seat->bar->layout, seat->bar->width - x, seat->bar->textpadding))) {
 		/* Clicked on layout */
 		if (ipc) {
 			if (seat->pointer_button == BTN_LEFT)
-				znet_tapesoftware_dwl_wm_monitor_v1_set_layout(seat->bar->dwl_wm_monitor, seat->bar->last_layout_idx);
+				zdwl_ipc_output_v2_set_layout(seat->bar->dwl_wm_output, seat->bar->last_layout_idx);
 			else if (seat->pointer_button == BTN_RIGHT)
-				znet_tapesoftware_dwl_wm_monitor_v1_set_layout(seat->bar->dwl_wm_monitor, 2);
+				zdwl_ipc_output_v2_set_layout(seat->bar->dwl_wm_output, 2);
 		}
 	} else {
 		uint32_t status_x = seat->bar->width / buffer_scale - TEXT_WIDTH(seat->bar->status.text, seat->bar->width - x, seat->bar->textpadding) / buffer_scale;
@@ -769,109 +769,6 @@ static const struct wl_seat_listener seat_listener = {
 };
 
 static void
-dwl_wm_tag(void *data, struct znet_tapesoftware_dwl_wm_v1 *dwl_wm, const char *name)
-{
-	char **ptr;
-	ARRAY_APPEND(tags, tags_l, tags_c, ptr);
-	if (!(*ptr = strdup(name)))
-		EDIE("strdup");
-}
-
-static void
-dwl_wm_layout(void *data, struct znet_tapesoftware_dwl_wm_v1 *dwl_wm, const char *name)
-{
-	char **ptr;
-	ARRAY_APPEND(layouts, layouts_l, layouts_c, ptr);
-	if (!(*ptr = strdup(name)))
-		EDIE("strdup");
-}
-
-static const struct znet_tapesoftware_dwl_wm_v1_listener dwl_wm_listener = {
-	.tag = dwl_wm_tag,
-	.layout = dwl_wm_layout
-};
-
-static void
-dwl_wm_monitor_selected(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
-			uint32_t selected)
-{
-	Bar *bar = (Bar *)data;
-
-	if (selected != bar->sel) {
-		bar->sel = selected;
-		bar->redraw = true;
-	}
-}
-
-static void
-dwl_wm_monitor_tag(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
-		   uint32_t tag, uint32_t state, uint32_t clients, int32_t focused_client)
-{
-	Bar *bar = (Bar *)data;
-
-	uint32_t imtags = bar->mtags;
-	uint32_t ictags = bar->ctags;
-	uint32_t iurg = bar->urg;
-	
-	if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE)
-		bar->mtags |= 1 << tag;
-	else
-		bar->mtags &= ~(1 << tag);
-	if (clients > 0)
-		bar->ctags |= 1 << tag;
-	else
-		bar->ctags &= ~(1 << tag);
-	if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT)
-		bar->urg |= 1 << tag;
-	else
-		bar->urg &= ~(1 << tag);
-
-	if (bar->mtags != imtags || bar->ctags != ictags || bar->urg != iurg)
-		bar->redraw = true;
-}
-
-static void
-dwl_wm_monitor_layout(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
-		      uint32_t layout)
-{
-	Bar *bar = (Bar *)data;
-
-	bar->layout = layouts[layout];
-	bar->last_layout_idx = bar->layout_idx;
-	bar->layout_idx = layout;
-	bar->redraw = true;
-}
-
-static void
-dwl_wm_monitor_title(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor,
-		     const char *title)
-{
-	if (custom_title)
-		return;
-
-	Bar *bar = (Bar *)data;
-
-	if (bar->window_title)
-		free(bar->window_title);
-	if (!(bar->window_title = strdup(title)))
-		EDIE("strdup");
-	bar->redraw = true;
-}
-
-static void
-dwl_wm_monitor_frame(void *data, struct znet_tapesoftware_dwl_wm_monitor_v1 *dwl_wm_monitor)
-{
-}
-
-static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwl_wm_monitor_listener = {
-	.selected = dwl_wm_monitor_selected,
-	.tag = dwl_wm_monitor_tag,
-	.layout = dwl_wm_monitor_layout,
-	.title = dwl_wm_monitor_title,
-	.frame = dwl_wm_monitor_frame
-};
-
-static void
 show_bar(Bar *bar)
 {
 	bar->wl_surface = wl_compositor_create_surface(compositor);
@@ -906,6 +803,151 @@ hide_bar(Bar *bar)
 }
 
 static void
+dwl_wm_tags(void *data, struct zdwl_ipc_manager_v2 *dwl_wm,
+	uint32_t amount)
+{
+	if (!tags && !(tags = malloc(amount * sizeof(char *))))
+		EDIE("malloc");
+	uint32_t i = tags_l;
+	ARRAY_EXPAND(tags, tags_l, tags_c, MAX(0, (int)amount - (int)tags_l));
+	for (; i < amount; i++)
+		if (!(tags[i] = strdup(tags_names[MIN(i, LENGTH(tags_names)-1)])))
+			EDIE("strdup");
+}
+
+static void
+dwl_wm_layout(void *data, struct zdwl_ipc_manager_v2 *dwl_wm,
+	const char *name)
+{
+	char **ptr;
+	ARRAY_APPEND(layouts, layouts_l, layouts_c, ptr);
+	if (!(*ptr = strdup(name)))
+		EDIE("strdup");
+}
+
+static const struct zdwl_ipc_manager_v2_listener dwl_wm_listener = {
+	.tags = dwl_wm_tags,
+	.layout = dwl_wm_layout
+};
+
+static void
+dwl_wm_output_toggle_visibility(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output)
+{
+	Bar *bar = (Bar *)data;
+
+	if (bar->hidden)
+		show_bar(bar);
+	else
+		hide_bar(bar);
+}
+
+static void
+dwl_wm_output_active(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	uint32_t active)
+{
+	Bar *bar = (Bar *)data;
+
+	if (active != bar->sel)
+		bar->sel = active;
+}
+
+static void
+dwl_wm_output_tag(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	uint32_t tag, uint32_t state, uint32_t clients, uint32_t focused)
+{
+	Bar *bar = (Bar *)data;
+
+	if (state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE)
+		bar->mtags |= 1 << tag;
+	else
+		bar->mtags &= ~(1 << tag);
+	if (clients > 0)
+		bar->ctags |= 1 << tag;
+	else
+		bar->ctags &= ~(1 << tag);
+	if (state & ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT)
+		bar->urg |= 1 << tag;
+	else
+		bar->urg &= ~(1 << tag);
+}
+
+static void
+dwl_wm_output_layout(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	uint32_t layout)
+{
+	Bar *bar = (Bar *)data;
+
+	bar->last_layout_idx = bar->layout_idx;
+	bar->layout_idx = layout;
+}
+
+static void
+dwl_wm_output_title(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	const char *title)
+{
+	if (custom_title)
+		return;
+
+	Bar *bar = (Bar *)data;
+
+	if (bar->window_title)
+		free(bar->window_title);
+	if (!(bar->window_title = strdup(title)))
+		EDIE("strdup");
+}
+
+static void
+dwl_wm_output_appid(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	const char *appid)
+{
+}
+
+static void
+dwl_wm_output_layout_symbol(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	const char *layout)
+{
+	Bar *bar = (Bar *)data;
+
+	if (layouts[bar->layout_idx])
+		free(layouts[bar->layout_idx]);
+	if (!(layouts[bar->layout_idx] = strdup(layout)))
+		EDIE("strdup");
+	bar->layout = layouts[bar->layout_idx];
+}
+
+static void
+dwl_wm_output_frame(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output)
+{
+	Bar *bar = (Bar *)data;
+	bar->redraw = true;
+}
+
+static void
+dwl_wm_output_fullscreen(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	uint32_t is_fullscreen)
+{
+}
+
+static void
+dwl_wm_output_floating(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
+	uint32_t is_floating)
+{
+}
+
+static const struct zdwl_ipc_output_v2_listener dwl_wm_output_listener = {
+	.toggle_visibility = dwl_wm_output_toggle_visibility,
+	.active = dwl_wm_output_active,
+	.tag = dwl_wm_output_tag,
+	.layout = dwl_wm_output_layout,
+	.title = dwl_wm_output_title,
+	.appid = dwl_wm_output_appid,
+	.layout_symbol = dwl_wm_output_layout_symbol,
+	.frame = dwl_wm_output_frame,
+	.fullscreen = dwl_wm_output_fullscreen,
+	.floating = dwl_wm_output_floating
+};
+
+static void
 setup_bar(Bar *bar)
 {
 	bar->height = height * buffer_scale;
@@ -919,10 +961,10 @@ setup_bar(Bar *bar)
 	zxdg_output_v1_add_listener(bar->xdg_output, &output_listener, bar);
 
 	if (ipc) {
-		bar->dwl_wm_monitor = znet_tapesoftware_dwl_wm_v1_get_monitor(dwl_wm, bar->wl_output);
-		if (!bar->dwl_wm_monitor)
-			DIE("Could not create dwl_wm_monitor");
-		znet_tapesoftware_dwl_wm_monitor_v1_add_listener(bar->dwl_wm_monitor, &dwl_wm_monitor_listener, bar);
+		bar->dwl_wm_output = zdwl_ipc_manager_v2_get_output(dwl_wm, bar->wl_output);
+		if (!bar->dwl_wm_output)
+			DIE("Could not create dwl_wm_output");
+		zdwl_ipc_output_v2_add_listener(bar->dwl_wm_output, &dwl_wm_output_listener, bar);
 	}
 	
 	if (!bar->hidden)
@@ -941,10 +983,10 @@ handle_global(void *data, struct wl_registry *registry,
 		layer_shell = wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 1);
 	} else if (!strcmp(interface, zxdg_output_manager_v1_interface.name)) {
 		output_manager = wl_registry_bind(registry, name, &zxdg_output_manager_v1_interface, 2);
-	} else if (!strcmp(interface, znet_tapesoftware_dwl_wm_v1_interface.name)) {
+	} else if (!strcmp(interface, zdwl_ipc_manager_v2_interface.name)) {
 		if (ipc) {
-			dwl_wm = wl_registry_bind(registry, name, &znet_tapesoftware_dwl_wm_v1_interface, 1);
-			znet_tapesoftware_dwl_wm_v1_add_listener(dwl_wm, &dwl_wm_listener, NULL);
+			dwl_wm = wl_registry_bind(registry, name, &zdwl_ipc_manager_v2_interface, 2);
+			zdwl_ipc_manager_v2_add_listener(dwl_wm, &dwl_wm_listener, NULL);
 		}
 	} else if (!strcmp(interface, wl_output_interface.name)) {
 		Bar *bar = calloc(1, sizeof(Bar));
@@ -977,10 +1019,12 @@ teardown_bar(Bar *bar)
 		free(bar->title.colors);
 	if (bar->title.buttons)
 		free(bar->title.buttons);
+	if (bar->window_title)
+		free(bar->window_title);
 	if (!ipc && bar->layout)
 		free(bar->layout);
 	if (ipc)
-		znet_tapesoftware_dwl_wm_monitor_v1_destroy(bar->dwl_wm_monitor);
+		zdwl_ipc_output_v2_destroy(bar->dwl_wm_output);
 	if (bar->xdg_output_name)
 		free(bar->xdg_output_name);
 	if (!bar->hidden) {
@@ -1739,18 +1783,12 @@ main(int argc, char **argv)
 	height = font->height / buffer_scale + vertical_padding * 2;
 
 	/* Configure tag names */
-	if (ipc && tags) {
-		for (uint32_t i = 0; i < tags_l; i++)
-			free(tags[i]);
-		free(tags);
-		tags_l = tags_c = 0;
-		tags = NULL;
-	} else if (!ipc && !tags) {
-		if (!(tags = malloc(LENGTH(tags_noipc) * sizeof(char *))))
+	if (!ipc && !tags) {
+		if (!(tags = malloc(LENGTH(tags_names) * sizeof(char *))))
 			EDIE("malloc");
-		tags_l = tags_c = LENGTH(tags_noipc);
+		tags_l = tags_c = LENGTH(tags_names);
 		for (uint32_t i = 0; i < tags_l; i++)
-			if (!(tags[i] = strdup(tags_noipc[i])))
+			if (!(tags[i] = strdup(tags_names[i])))
 				EDIE("strdup");
 	}
 	
@@ -1829,7 +1867,7 @@ main(int argc, char **argv)
 	zwlr_layer_shell_v1_destroy(layer_shell);
 	zxdg_output_manager_v1_destroy(output_manager);
 	if (ipc)
-		znet_tapesoftware_dwl_wm_v1_destroy(dwl_wm);
+		zdwl_ipc_manager_v2_destroy(dwl_wm);
 	
 	fcft_destroy(font);
 	fcft_fini();
