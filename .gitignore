@@ -7,5 +7,5 @@ xdg-shell-protocol.c
 xdg-shell-protocol.h
 xdg-output-unstable-v1-protocol.c
 xdg-output-unstable-v1-protocol.h
-net-tapesoftware-dwl-wm-unstable-v1-protocol.c
-net-tapesoftware-dwl-wm-unstable-v1-protocol.h
+dwl-ipc-unstable-v2-protocol.c
+dwl-ipc-unstable-v2-protocol.h

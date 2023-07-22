@@ -18,8 +18,8 @@ static bool custom_title = false;
 static uint32_t buffer_scale = 1;
 // font
 static char *fontstr = "monospace:size=16";
-// tag names if ipc is disabled
-static char *tags_noipc[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+// tag names
+static char *tags_names[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 // set 16-bit colors for bar
 // 8-bit color can be converted to 16-bit color by simply duplicating values e.g
