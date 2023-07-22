@@ -179,6 +179,7 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct zwlr_layer_shell_v1 *layer_shell;
 static struct zxdg_output_manager_v1 *output_manager;
+
 static struct zdwl_ipc_manager_v2 *dwl_wm;
 static struct wl_cursor_image *cursor_image;
 static struct wl_surface *cursor_surface;
@@ -583,18 +584,6 @@ pointer_enter(void *data, struct wl_pointer *pointer,
 			break;
 		}
 	}
-
-	if (!cursor_image) {
-		struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24 * buffer_scale, shm);
-		cursor_image = wl_cursor_theme_get_cursor(cursor_theme, "left_ptr")->images[0];
-		cursor_surface = wl_compositor_create_surface(compositor);
-        wl_surface_set_buffer_scale(cursor_surface, buffer_scale);
-		wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(cursor_image), 0, 0);
-		wl_surface_commit(cursor_surface);
-	}
-	wl_pointer_set_cursor(pointer, serial, cursor_surface,
-			      cursor_image->hotspot_x,
-			      cursor_image->hotspot_y);
 }
 
 static void
