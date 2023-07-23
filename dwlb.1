@@ -1,0 +1,324 @@
+.TH DWLB 1 2023 Linux "User's Reference Manuals"
+.
+.SH NAME
+dwlb \- feature-complete bar for dwl
+.
+.SH SYNOPSIS
+.
+.SY dwlb
+.RI [ OPTIONS\~ \&.\|.\|.\&]
+.YS
+.
+.SH DESCRIPTION
+.
+.B dwlb
+is a feature-complete status bar for
+.IR dwl .
+.
+.SH USAGE
+.
+Pass
+.B dwlb
+as an argument to
+.IR dwl 's
+.B -s
+flag.
+This will populate
+each connected output with a bar.
+.
+.PP
+For example:
+.IP
+.EX
+dwl \-s \(aqdwlb \-font "monospace:size=16"\(aq
+.EE
+.
+.SS IPC
+.
+.PP
+If
+.I dwl
+is patched appropriately,
+.B dwlb
+is capable of communicating directly with
+.IR dwl .
+When IPC is enabled with
+.BR \-ipc ,
+.B dwlb
+does not read from
+.IR stdin ,
+and clicking tags functions as you would expect.
+IPC can be disabled with
+.BR \-no\-ipc .
+.
+.SS Commands
+.
+Command options send instructions
+to existing instances of
+.BR dwlb .
+All commands take at least one argument
+to specify a bar on which to operate.
+This may be
+.I zxdg_output_v1
+name,
+"all" to affect all outputs,
+or "selected" for the current output.
+.
+.PP
+The
+.B \-status
+and
+.B \-title
+commands are used to write status text.
+The text may contain in-line commands
+in the following format:
+.IR \(hacmd(argument) .
+.
+.TP
+.BR \(hafg \c
+.BI ( HEXCOLOR )
+Sets foreground color to
+.IR HEXCOLOR .
+.TP
+.BR \(habg \c
+.BI ( HEXCOLOR )
+Sets background color to
+.IR HEXCOLOR .
+.TP
+.BR \(halm \c
+.BI ( SHELLCOMMAND )
+Begins or terminates left mouse button region with action
+.IR SHELLCOMMAND .
+.TP
+.BR \(hamm \c
+.BI ( SHELLCOMMAND )
+Begins or terminates middle mouse button region with action
+.IR SHELLCOMMAND .
+.TP
+.BR \(harm \c
+.BI ( SHELLCOMMAND )
+Begins or terminates right mouse button region with action
+.IR SHELLCOMMAND .
+.
+.PP
+In this example,
+clicking the text highlighted in red
+will spawn the foot terminal.
+.
+.IP
+.EX
+dwlb \-status all \(aqtext \(habg(ff0000)\(halm(foot)text\(habg()\(halm() text\(aq
+.EE
+.
+.PP
+A color command with no argument reverts to the default value.
+.B \(ha\(ha
+represents a single
+.B \(ha
+character.
+Status commands can be disabled with
+.BR \-no\-status\-commands .
+.
+.SS Scaling
+.
+.PP
+If you use scaling in Wayland,
+you can specify
+.B buffer_scale
+through config file or by passing it as an option
+(only integer values):
+.
+.IP
+.EX
+dwlb \-scale 2
+.EE
+.
+.PP
+This will render both surface and a cursor with 2\(mu detail.
+If your monitor is set to 1.25 or 1.5 scaling,
+setting scale to 2 will also work as compositor
+will downscale the buffer properly.
+.
+.SS Someblocks
+.
+.PP
+To use
+.IR someblocks ,
+or any program that outputs to
+.IR stdout ,
+with
+.BR dwlb ,
+use this one-liner:
+.
+.IP
+.EX
+someblocks \-p | dwlb \-status\-stdin all
+.EE
+.
+.SH OPTIONS
+.
+.SS IPC
+.
+.TP
+.B \-ipc
+Allow commands to be sent to
+.I dwl
+.RI ( dwl
+Must be patched)
+.TP
+.B \-no\-ipc
+Disable ipc
+.
+.SS Configuration
+.
+.TP
+.B \-hidden
+Bars will initially be hidden
+.TP
+.B \-no\-hidden
+Bars will not initially be hidden
+.TP
+.B \-bottom
+Bars will initially be drawn at the bottom
+.TP
+.B \-no\-bottom
+Bars will initially be drawn at the top
+.TP
+.B \-hide\-vacant\-tags
+Do not display empty and inactive tags
+.TP
+.B \-no\-hide\-vacant\-tags
+Display empty and inactive tags
+.TP
+.B \-status\-commands
+Enable in-line commands in status text
+.TP
+.B \-no\-status\-commands
+Disable in-line commands in status text
+.TP
+.B \-center\-title
+Center title text on bar
+.TP
+.B \-no\-center\-title
+Do not center title text on bar
+.TP
+.B \-custom\-title
+Do not display window title and
+Treat the area as another status text element;
+see
+.B \-title
+command
+.TP
+.B \-no\-custom\-title
+Display current window title as normal
+.TP
+.BR \-font \~\c
+.I FONT
+Specify a font
+.TP
+.BR \-tags \~\c
+.IR NUMBER \~\c
+.IR FIRST \&.\|.\|.\& LAST
+If ipc is disabled, specify custom tag names
+.TP
+.BR \-vertical\-padding \~\c
+.I PIXELS
+Specify vertical pixel padding above and below text
+.TP
+.BR \-active\-fg\-color \~\c
+.I COLOR
+Specify text color of active tags or monitors
+.TP
+.BR \-active\-bg\-color \~\c
+.I COLOR
+Specify background color of active tags or monitors
+.TP
+.BR \-occupied\-fg\-color \~\c
+.I COLOR
+Specify text color of occupied tags
+.TP
+.BR \-occupied\-bg\-color \~\c
+.I COLOR
+Specify background color of occupied tags
+.TP
+.BR \-inactive\-fg\-color \~\c
+.I COLOR
+Specify text color of inactive tags or monitors
+.TP
+.BR \-inactive\-bg\-color \~\c
+.I COLOR
+Specify background color of inactive tags or monitors
+.TP
+.BR \-urgent\-fg\-color \~\c
+.I COLOR
+Specify text color of urgent tags
+.TP
+.BR \-urgent\-bg\-color \~\c
+.I COLOR
+Specify background color of urgent tags
+.TP
+.BR \-scale \~\c
+.I BUFFER_SCALE
+Specify buffer scale value for integer scaling
+.
+.SS Commands
+.
+.TP
+.BR \-status \~\c
+.I OUTPUT\~TEXT
+Set status text
+.TP
+.BR \-status\-stdin \~\c
+.I OUTPUT
+Set status text from stdin
+.TP
+.BR \-title \~\c
+.I OUTPUT\~TEXT
+Set title text,
+if
+.B \-custom\-title
+Is enabled
+.TP
+.BR \-show \~\c
+.I OUTPUT
+Show bar
+.TP
+.BR \-hide \~\c
+.I OUTPUT
+Hide bar
+.TP
+.BR \-toggle\-visibility \~\c
+.I OUTPUT
+Toggle bar visibility
+.TP
+.BR \-set\-top \~\c
+.I OUTPUT
+Draw bar at the top
+.TP
+.BR \-set\-bottom \~\c
+.I OUTPUT
+Draw bar at the bottom
+.TP
+.BR \-toggle\-location \~\c
+.I OUTPUT
+Toggle bar location
+.
+.SS Others
+.
+.TP
+.B \-v
+Get version information
+.TP
+.B \-h
+View this help text
+.
+.SH SEE ALSO
+.
+.BR dwl (1),
+.BR someblocks (1)
+.
+.SH AUTHOR
+.
+.UR https://\:github\:.com/\:kolunmi
+kolumni
+.UE
