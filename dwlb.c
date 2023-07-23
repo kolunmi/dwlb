@@ -589,6 +589,22 @@ pointer_enter(void *data, struct wl_pointer *pointer,
 			break;
 		}
 	}
+
+	if (!cursor_image) {
+		const char *size_str = getenv("XCURSOR_SIZE");
+		int size = size_str ? atoi(size_str) : 0;
+		if (size == 0)
+			size = 24;
+		struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), size * buffer_scale, shm);
+		cursor_image = wl_cursor_theme_get_cursor(cursor_theme, "left_ptr")->images[0];
+		cursor_surface = wl_compositor_create_surface(compositor);
+		wl_surface_set_buffer_scale(cursor_surface, buffer_scale);
+		wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(cursor_image), 0, 0);
+		wl_surface_commit(cursor_surface);
+	}
+	wl_pointer_set_cursor(pointer, serial, cursor_surface,
+			      cursor_image->hotspot_x,
+			      cursor_image->hotspot_y);
 }
 
 static void
