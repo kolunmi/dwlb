@@ -1,4 +1,5 @@
 BINS = dwlb
+MANS = dwlb.1
 
 PREFIX ?= /usr/local
 CFLAGS += -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -g
@@ -13,6 +14,7 @@ clean:
 
 install: all
 	install -D -t $(PREFIX)/bin $(BINS)
+	install -D -m0644 -t $(PREFIX)/share/man/man1 $(MANS)
 
 WAYLAND_PROTOCOLS=$(shell pkg-config --variable=pkgdatadir wayland-protocols)
 WAYLAND_SCANNER=$(shell pkg-config --variable=wayland_scanner wayland-scanner)
