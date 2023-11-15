@@ -97,6 +97,7 @@
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
 	"	-scale [BUFFER_SCALE]		specify buffer scale value for integer scaling\n" \
 	"Commands\n"							\
+	"	-target-socket [SOCKET-NAME]	set the socket to send command to. Sockets can be found in `$XDG_RUNTIME_DIR/dwlb/`\n"\
 	"	-status	[OUTPUT] [TEXT]		set status text\n"	\
 	"	-status-stdin	[OUTPUT]		set status text from stdin\n"	\
 	"	-title	[OUTPUT] [TEXT]		set title text, if -custom-title is enabled\n"	\
@@ -1565,7 +1566,7 @@ event_loop(void)
 
 static void
 client_send_command(struct sockaddr_un *sock_address, const char *output,
-		    const char *cmd, const char *data)
+		    const char *cmd, const char *data, const char *target_socket)
 {
 	DIR *dir;
 	if (!(dir = opendir(socketdir)))
@@ -1584,20 +1585,22 @@ client_send_command(struct sockaddr_un *sock_address, const char *output,
 	/* Send data to all dwlb instances */
 	while ((de = readdir(dir))) {
 		if (!strncmp(de->d_name, "dwlb-", 5)) {
-			if (newfd && (sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
-				EDIE("socket");
-			snprintf(sock_address->sun_path, sizeof sock_address->sun_path, "%s/%s", socketdir, de->d_name);
-			if (connect(sock_fd, (struct sockaddr *) sock_address, sizeof(*sock_address)) == -1) {
-				newfd = false;
-				continue;
+			if (!target_socket || !strncmp(de -> d_name, target_socket, 6)){
+				if (newfd && (sock_fd = socket(AF_UNIX, SOCK_STREAM, 1)) == -1)
+					EDIE("socket");
+				snprintf(sock_address->sun_path, sizeof sock_address->sun_path, "%s/%s", socketdir, de->d_name);
+				if (connect(sock_fd, (struct sockaddr *) sock_address, sizeof(*sock_address)) == -1) {
+					newfd = false;
+					continue;
+				}
+				if (send(sock_fd, sockbuf, len, 0) == -1)
+					fprintf(stderr, "Could not send status data to '%s'\n", sock_address->sun_path);
+				close(sock_fd);
+				newfd = true;
 			}
-			if (send(sock_fd, sockbuf, len, 0) == -1)
-				fprintf(stderr, "Could not send status data to '%s'\n", sock_address->sun_path);
-			close(sock_fd);
-			newfd = true;
 		}
 	}
-			
+
 	closedir(dir);
 }
 
@@ -1626,11 +1629,20 @@ main(int argc, char **argv)
 	sock_address.sun_family = AF_UNIX;
 
 	/* Parse options */
-	for (int i = 1; i < argc; i++) {
+	char *target_socket = NULL;
+	int i = 1;
+	if (argc > 1 && !strcmp(argv[1], "-target-socket")) {
+		if (2 >= argc) {
+			DIE("Option -socket requires an argument");
+		}
+		target_socket = argv[2];
+		i += 2;
+	}
+	for (; i < argc; i++) {
 		if (!strcmp(argv[i], "-status")) {
 			if (++i + 1 >= argc)
 				DIE("Option -status requires two arguments");
-			client_send_command(&sock_address, argv[i], "status", argv[i + 1]);
+			client_send_command(&sock_address, argv[i], "status", argv[i + 1], target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-status-stdin")) {
 			if (++i >= argc)
@@ -1638,44 +1650,44 @@ main(int argc, char **argv)
 			char *status = malloc(TEXT_MAX * sizeof(char));
 			while (fgets(status, TEXT_MAX-1, stdin)) {
 				status[strlen(status)-1] = '\0';
-				client_send_command(&sock_address, argv[i], "status", status);
+				client_send_command(&sock_address, argv[i], "status", status, target_socket);
 			}
 			free(status);
 			return 0;
 		} else if (!strcmp(argv[i], "-title")) {
 			if (++i + 1 >= argc)
 				DIE("Option -title requires two arguments");
-			client_send_command(&sock_address, argv[i], "title", argv[i + 1]);
+			client_send_command(&sock_address, argv[i], "title", argv[i + 1], target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-show")) {
 			if (++i >= argc)
 				DIE("Option -show requires an argument");
-			client_send_command(&sock_address, argv[i], "show", NULL);
+			client_send_command(&sock_address, argv[i], "show", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-hide")) {
 			if (++i >= argc)
 				DIE("Option -hide requires an argument");
-			client_send_command(&sock_address, argv[i], "hide", NULL);
+			client_send_command(&sock_address, argv[i], "hide", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-toggle-visibility")) {
 			if (++i >= argc)
 				DIE("Option -toggle requires an argument");
-			client_send_command(&sock_address, argv[i], "toggle-visibility", NULL);
+			client_send_command(&sock_address, argv[i], "toggle-visibility", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-set-top")) {
 			if (++i >= argc)
 				DIE("Option -set-top requires an argument");
-			client_send_command(&sock_address, argv[i], "set-top", NULL);
+			client_send_command(&sock_address, argv[i], "set-top", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-set-bottom")) {
 			if (++i >= argc)
 				DIE("Option -set-bottom requires an argument");
-			client_send_command(&sock_address, argv[i], "set-bottom", NULL);
+			client_send_command(&sock_address, argv[i], "set-bottom", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-toggle-location")) {
 			if (++i >= argc)
 				DIE("Option -toggle-location requires an argument");
-			client_send_command(&sock_address, argv[i], "toggle-location", NULL);
+			client_send_command(&sock_address, argv[i], "toggle-location", NULL, target_socket);
 			return 0;
 		} else if (!strcmp(argv[i], "-ipc")) {
 			ipc = true;
