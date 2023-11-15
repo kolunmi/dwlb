@@ -85,7 +85,7 @@
 	"	-custom-title			do not display window title and treat the area as another status text element; see -title command\n" \
 	"	-no-custom-title		display current window title as normal\n" \
 	"	-font [FONT]			specify a font\n"	\
-	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names\n" \
+	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names. If NUMBER is 0, then no tag names should be given \n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
 	"	-active-fg-color [COLOR]	specify text color of active tags or monitors\n" \
 	"	-active-bg-color [COLOR]	specify background color of active tags or monitors\n" \
@@ -1754,10 +1754,10 @@ main(int argc, char **argv)
 			if (parse_color(argv[i], &urgent_bg_color) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-tags")) {
-			if (++i + 1 >= argc)
-				DIE("Option -tags requires at least two arguments");
+			if (++i >= argc)
+				DIE("Option -tags requires at least one argument");
 			int v;
-			if ((v = atoi(argv[i])) <= 0 || i + v >= argc)
+			if ((v = atoi(argv[i])) < 0 || i + v >= argc)
 				DIE("-tags: invalid arguments");
 			if (tags) {
 				for (uint32_t j = 0; j < tags_l; j++)
