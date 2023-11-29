@@ -95,6 +95,8 @@
 	"	-inactive-bg-color [COLOR]	specify background color of inactive tags or monitors\n" \
 	"	-urgent-fg-color [COLOR]	specify text color of urgent tags\n" \
 	"	-urgent-bg-color [COLOR]	specify background color of urgent tags\n" \
+	"	-middle-bg-color [COLOR]	specify background color of the color in the middle of the bar\n" \
+	"	-middle-bg-color-selected [COLOR]	specify background color of the color in the middle of the bar, when selected\n" \
 	"	-scale [BUFFER_SCALE]		specify buffer scale value for integer scaling\n" \
 	"Commands\n"							\
 	"	-target-socket [SOCKET-NAME]	set the socket to send command to. Sockets can be found in `$XDG_RUNTIME_DIR/dwlb/`\n"\
@@ -441,7 +443,7 @@ draw_frame(Bar *bar)
 		nx = MIN(x + bar->textpadding, bar->width - status_width);
 	}
 	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
-				bar->sel ? &active_bg_color : &inactive_bg_color, 1,
+				bar->sel ? &middle_bg_color_selected : &middle_bg_color, 1,
 				&(pixman_box32_t){
 					.x1 = x, .x2 = nx,
 					.y1 = 0, .y2 = bar->height
@@ -457,7 +459,7 @@ draw_frame(Bar *bar)
 		      custom_title ? bar->title.colors_l : 0);
 
 	pixman_image_fill_boxes(PIXMAN_OP_SRC, background,
-				bar->sel ? &active_bg_color : &inactive_bg_color, 1,
+				bar->sel ? &middle_bg_color_selected : &middle_bg_color, 1,
 				&(pixman_box32_t){
 					.x1 = x, .x2 = bar->width - status_width,
 					.y1 = 0, .y2 = bar->height
@@ -1764,6 +1766,16 @@ main(int argc, char **argv)
 			if (++i >= argc)
 				DIE("Option -urgent-bg-color requires an argument");
 			if (parse_color(argv[i], &urgent_bg_color) == -1)
+				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-middle-bg-color-selected")) {
+			if (++i >= argc)
+				DIE("Option -middle-bg-color-selected requires an argument");
+			if (parse_color(argv[i], &middle_bg_color_selected) == -1)
+				DIE("malformed color string");
+		} else if (!strcmp(argv[i], "-middle-bg-color")) {
+			if (++i >= argc)
+				DIE("Option -middle-bg-color requires an argument");
+			if (parse_color(argv[i], &middle_bg_color) == -1)
 				DIE("malformed color string");
 		} else if (!strcmp(argv[i], "-tags")) {
 			if (++i >= argc)
