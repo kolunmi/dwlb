@@ -115,6 +115,8 @@
 
 #define TEXT_MAX 2048
 
+enum { WheelUp, WheelDown };
+
 typedef struct {
 	pixman_color_t color;
 	bool bg;
@@ -657,7 +659,7 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 		}
 		x += TEXT_WIDTH(tags[i], seat->bar->width - x, seat->bar->textpadding) / buffer_scale;
 	} while (seat->pointer_x >= x && ++i < tags_l);
-	
+
 	if (i < tags_l) {
 		/* Clicked on tags */
 		if (ipc) {
@@ -699,6 +701,7 @@ pointer_frame(void *data, struct wl_pointer *pointer)
 		} else {
 			/* Clicked on status */
 			for (i = 0; i < seat->bar->status.buttons_l; i++) {
+			
 				if (seat->pointer_button == seat->bar->status.buttons[i].btn
 				    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x1 / buffer_scale
 				    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x2 / buffer_scale) {
@@ -722,6 +725,25 @@ static void
 pointer_axis_discrete(void *data, struct wl_pointer *pointer,
 		      uint32_t axis, int32_t discrete)
 {
+	uint32_t i;
+	uint32_t btn = discrete < 0 ? WheelUp : WheelDown;
+	Seat *seat = (Seat *)data;
+
+	if (!seat->bar)
+		return;
+
+	uint32_t status_x = seat->bar->width / buffer_scale - TEXT_WIDTH(seat->bar->status.text, seat->bar->width, seat->bar->textpadding) / buffer_scale;
+	if (seat->pointer_x > status_x) {
+		/* Clicked on status */
+		for (i = 0; i < seat->bar->status.buttons_l; i++) {
+			if (btn == seat->bar->status.buttons[i].btn
+			    && seat->pointer_x >= status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x1 / buffer_scale
+			    && seat->pointer_x < status_x + seat->bar->textpadding + seat->bar->status.buttons[i].x2 / buffer_scale) {
+				shell_command(seat->bar->status.buttons[i].command);
+				break;
+			}
+		}
+	}
 }
 
 static void
@@ -1259,6 +1281,8 @@ parse_into_customtext(CustomText *ct, char *text)
 		Button *left_button = NULL;
 		Button *middle_button = NULL;
 		Button *right_button = NULL;
+		Button *scrollup_button = NULL;
+		Button *scrolldown_button = NULL;
 	
 		for (char *p = text; *p && str_pos < sizeof(ct->text) - 1; p++) {
 			if (state == UTF8_ACCEPT && *p == '^') {
@@ -1318,6 +1342,26 @@ parse_into_customtext(CustomText *ct, char *text)
 							snprintf(right_button->command, sizeof right_button->command, "%s", arg);
 							right_button->x1 = x;
 						}
+					} else if (!strcmp(p, "us")) {
+						if (scrollup_button) {
+							scrollup_button->x2 = x;
+							scrollup_button = NULL;
+						} else if (*arg) {
+							ARRAY_APPEND(ct->buttons, ct->buttons_l, ct->buttons_c, scrollup_button);
+							scrollup_button->btn = WheelUp;
+							snprintf(scrollup_button->command, sizeof scrollup_button->command, "%s", arg);
+							scrollup_button->x1 = x;
+						}
+					} else if (!strcmp(p, "ds")) {
+						if (scrolldown_button) {
+							scrolldown_button->x2 = x;
+							scrolldown_button = NULL;
+						} else if (*arg) {
+							ARRAY_APPEND(ct->buttons, ct->buttons_l, ct->buttons_c, scrolldown_button);
+							scrolldown_button->btn = WheelDown;
+							snprintf(scrolldown_button->command, sizeof scrolldown_button->command, "%s", arg);
+							scrolldown_button->x1 = x;
+						}
 					} 
 
 					*--arg = '(';
@@ -1351,6 +1395,11 @@ parse_into_customtext(CustomText *ct, char *text)
 			middle_button->x2 = x;
 		if (right_button)
 			right_button->x2 = x;
+		if (scrollup_button)
+			scrollup_button->x2 = x;
+		if (scrolldown_button)
+			scrolldown_button->x2 = x;
+	
 		
 		ct->text[str_pos] = '\0';
 	} else {

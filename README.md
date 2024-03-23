@@ -43,6 +43,8 @@ The `-status` and `-title` commands are used to write status text. The text may 
 | `^lm(SHELLCOMMAND)` | Begins or terminates left mouse button region with action `SHELLCOMMAND`.   |
 | `^mm(SHELLCOMMAND)` | Begins or terminates middle mouse button region with action `SHELLCOMMAND`. |
 | `^rm(SHELLCOMMAND)` | Begins or terminates right mouse button region with action `SHELLCOMMAND`.  |
+| `^us(SHELLCOMMAND)` | Begins or terminates mouse scroll up region with action `SHELLCOMMAND`.     |
+| `^ds(SHELLCOMMAND)` | Begins or terminates mouse scroll down region with action `SHELLCOMMAND`.   |
 
 In this example, clicking the text highlighted in red will spawn the [foot](https://codeberg.org/dnkl/foot) terminal.
 ```bash
