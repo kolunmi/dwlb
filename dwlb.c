@@ -84,6 +84,8 @@
 	"	-no-center-title		do not center title text on bar\n" \
 	"	-custom-title			do not display window title and treat the area as another status text element; see -title command\n" \
 	"	-no-custom-title		display current window title as normal\n" \
+	"	-active-color-title		title colors will use active colors\n" \
+	"	-no-active-color-title		title colors will use inactive colors\n" \
 	"	-font [FONT]			specify a font\n"	\
 	"	-tags [NUMBER] [FIRST]...[LAST]	if ipc is disabled, specify custom tag names. If NUMBER is 0, then no tag names should be given \n" \
 	"	-vertical-padding [PIXELS]	specify vertical pixel padding above and below text\n" \
@@ -454,8 +456,8 @@ draw_frame(Bar *bar)
 	
 	x = draw_text(custom_title ? bar->title.text : bar->window_title,
 		      x, y, foreground, background,
-		      bar->sel ? &active_fg_color : &inactive_fg_color,
-		      bar->sel ? &active_bg_color : &inactive_bg_color,
+		      (bar->sel && active_color_title) ? &active_fg_color : &inactive_fg_color,
+		      (bar->sel && active_color_title) ? &active_bg_color : &inactive_bg_color,
 		      bar->width - status_width, bar->height, 0,
 		      custom_title ? bar->title.colors : NULL,
 		      custom_title ? bar->title.colors_l : 0);
@@ -1767,6 +1769,10 @@ main(int argc, char **argv)
 			custom_title = true;
 		} else if (!strcmp(argv[i], "-no-custom-title")) {
 			custom_title = false;
+		} else if (!strcmp(argv[i], "-active-color-title")) {
+			active_color_title = true;
+		} else if (!strcmp(argv[i], "-no-active-color-title")) {
+			active_color_title = false; 
 		} else if (!strcmp(argv[i], "-font")) {
 			if (++i >= argc)
 				DIE("Option -font requires an argument");
