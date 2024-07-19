@@ -442,7 +442,7 @@ draw_frame(Bar *bar)
 	uint32_t nx;
 	if (center_title) {
 		uint32_t title_width = TEXT_WIDTH(custom_title ? bar->title.text : bar->window_title, bar->width - status_width - x, 0);
-		nx = MAX(x, MIN((bar->width - title_width) / 2, bar->width - status_width - title_width));
+		nx = MAX(x, MIN(((bar->width - title_width - x - status_width) / 2) + x, bar->width - status_width - title_width));
 	} else {
 		nx = MIN(x + bar->textpadding, bar->width - status_width);
 	}
