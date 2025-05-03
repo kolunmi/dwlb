@@ -244,6 +244,7 @@ draw_text(char *text,
 	  uint32_t x,
 	  uint32_t y,
 	  pixman_image_t *foreground,
+	  pixman_image_t *foreground_mask,
 	  pixman_image_t *background,
 	  pixman_color_t *fg_color,
 	  pixman_color_t *bg_color,
@@ -265,10 +266,13 @@ draw_text(char *text,
 	bool draw_fg = foreground && fg_color;
 	bool draw_bg = background && bg_color;
 	
-	pixman_image_t *fg_fill;
+	pixman_image_t *fg_mask_fill;
+	pixman_color_t *cur_fg_color;
 	pixman_color_t *cur_bg_color;
-	if (draw_fg)
-		fg_fill = pixman_image_create_solid_fill(fg_color);
+	if (draw_fg) {
+		cur_fg_color = fg_color;
+		fg_mask_fill= pixman_image_create_solid_fill(&(pixman_color_t){0xFFFF,0xFFFF,0xFFFF,0xFFFF});
+	}
 	if (draw_bg)
 		cur_bg_color = bg_color;
 
@@ -281,8 +285,7 @@ draw_text(char *text,
 					if (draw_bg)
 						cur_bg_color = &colors[color_ind].color;
 				} else if (draw_fg) {
-					pixman_image_unref(fg_fill);
-					fg_fill = pixman_image_create_solid_fill(&colors[color_ind].color);
+					cur_fg_color = &colors[color_ind].color;
 				}
 				color_ind++;
 			}
@@ -310,20 +313,19 @@ draw_text(char *text,
 		if (draw_fg) {
 			/* Detect and handle pre-rendered glyphs (e.g. emoji) */
 			if (pixman_image_get_format(glyph->pix) == PIXMAN_a8r8g8b8) {
-				/* Only the alpha channel of the mask is used, so we can
-				 * use fgfill here to blend prerendered glyphs with the
-				 * same opacity */
 				pixman_image_composite32(
-					PIXMAN_OP_OVER, glyph->pix, fg_fill, foreground, 0, 0, 0, 0,
+					PIXMAN_OP_OVER, glyph->pix, NULL, foreground, 0, 0, 0, 0,
 					x + glyph->x, y - glyph->y, glyph->width, glyph->height);
 			} else {
-				/* Applying the foreground color here would mess up
-				 * component alphas for subpixel-rendered text, so we
-				 * apply it when blending. */
-				pixman_image_composite32(
-					PIXMAN_OP_OVER, fg_fill, glyph->pix, foreground, 0, 0, 0, 0,
-					x + glyph->x, y - glyph->y, glyph->width, glyph->height);
+				pixman_image_fill_boxes(PIXMAN_OP_OVER, foreground,
+					cur_fg_color, 1, &(pixman_box32_t){
+						.x1 = x, .x2 = nx,
+						.y1 = 0, .y2 = buf_height
+					});
 			}
+			pixman_image_composite32(
+				PIXMAN_OP_OVER, glyph->pix, fg_mask_fill, foreground_mask, 0, 0, 0, 0,
+				x + glyph->x, y - glyph->y, glyph->width, glyph->height);
 		}
 		
 		if (draw_bg) {
@@ -339,7 +341,7 @@ draw_text(char *text,
 	}
 	
 	if (draw_fg)
-		pixman_image_unref(fg_fill);
+		pixman_image_unref(fg_mask_fill);
 	if (!last_cp)
 		return ix;
 	
@@ -362,7 +364,7 @@ draw_text(char *text,
 }
 
 #define TEXT_WIDTH(text, maxwidth, padding)				\
-	draw_text(text, 0, 0, NULL, NULL, NULL, NULL, maxwidth, 0, padding, NULL, 0)
+	draw_text(text, 0, 0, NULL, NULL, NULL, NULL, NULL, maxwidth, 0, padding, NULL, 0)
 
 static int
 draw_frame(Bar *bar)
@@ -389,6 +391,7 @@ draw_frame(Bar *bar)
 	
 	/* Text background and foreground layers */
 	pixman_image_t *foreground = pixman_image_create_bits(PIXMAN_a8r8g8b8, bar->width, bar->height, NULL, bar->width * 4);
+	pixman_image_t *foreground_mask = pixman_image_create_bits(PIXMAN_a8, bar->width, bar->height, NULL, bar->width * 4);
 	pixman_image_t *background = pixman_image_create_bits(PIXMAN_a8r8g8b8, bar->width, bar->height, NULL, bar->width * 4);
 	
 	/* Draw on images */
@@ -414,6 +417,12 @@ draw_frame(Bar *bar)
 							.x1 = x + boxs, .x2 = x + boxs + boxw,
 							.y1 = boxs, .y2 = boxs + boxw
 						});
+			pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground_mask,
+						&(pixman_color_t){0xFFFF,0xFFFF,0xFFFF,0xFFFF},
+						1, &(pixman_box32_t){
+							.x1 = x + boxs, .x2 = x + boxs + boxw,
+							.y1 = boxs, .y2 = boxs + boxw
+						});
 			if ((!bar->sel || !active) && boxw >= 3) {
 				/* Make box hollow */
 				pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground,
@@ -422,19 +431,25 @@ draw_frame(Bar *bar)
 								.x1 = x + boxs + 1, .x2 = x + boxs + boxw - 1,
 								.y1 = boxs + 1, .y2 = boxs + boxw - 1
 							});
+				pixman_image_fill_boxes(PIXMAN_OP_SRC, foreground_mask,
+							&(pixman_color_t){ 0 },
+							1, &(pixman_box32_t){
+								.x1 = x + boxs + 1, .x2 = x + boxs + boxw - 1,
+								.y1 = boxs + 1, .y2 = boxs + boxw - 1
+							});
 			}
 		}
 		
-		x = draw_text(tags[i], x, y, foreground, background, fg_color, bg_color,
+		x = draw_text(tags[i], x, y, foreground, foreground_mask, background, fg_color, bg_color,
 			      bar->width, bar->height, bar->textpadding, NULL, 0);
 	}
 	
-	x = draw_text(bar->layout, x, y, foreground, background,
+	x = draw_text(bar->layout, x, y, foreground, foreground_mask, background,
 		      &inactive_fg_color, &inactive_bg_color, bar->width,
 		      bar->height, bar->textpadding, NULL, 0);
 	
 	uint32_t status_width = TEXT_WIDTH(bar->status.text, bar->width - x, bar->textpadding);
-	draw_text(bar->status.text, bar->width - status_width, y, foreground,
+	draw_text(bar->status.text, bar->width - status_width, y, foreground, foreground_mask,
 		  background, &inactive_fg_color, &inactive_bg_color,
 		  bar->width, bar->height, bar->textpadding,
 		  bar->status.colors, bar->status.colors_l);
@@ -455,7 +470,7 @@ draw_frame(Bar *bar)
 	x = nx;
 	
 	x = draw_text(custom_title ? bar->title.text : bar->window_title,
-		      x, y, foreground, background,
+		      x, y, foreground, foreground_mask, background,
 		      (bar->sel && active_color_title) ? &active_fg_color : &inactive_fg_color,
 		      (bar->sel && active_color_title) ? &active_bg_color : &inactive_bg_color,
 		      bar->width - status_width, bar->height, 0,
@@ -471,9 +486,11 @@ draw_frame(Bar *bar)
 
 	/* Draw background and foreground on bar */
 	pixman_image_composite32(PIXMAN_OP_OVER, background, NULL, final, 0, 0, 0, 0, 0, 0, bar->width, bar->height);
-	pixman_image_composite32(PIXMAN_OP_OVER, foreground, NULL, final, 0, 0, 0, 0, 0, 0, bar->width, bar->height);
+	pixman_image_set_alpha_map(foreground, foreground_mask, 0, 0);
+	pixman_image_composite32(PIXMAN_OP_OVER, foreground, foreground_mask, final, 0, 0, 0, 0, 0, 0, bar->width, bar->height);
 
 	pixman_image_unref(foreground);
+	pixman_image_unref(foreground_mask);
 	pixman_image_unref(background);
 	pixman_image_unref(final);
 	
