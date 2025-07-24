@@ -1447,149 +1447,151 @@ copy_customtext(CustomText *from, CustomText *to)
 static void
 read_socket(void)
 {
-	int cli_fd;
-	if ((cli_fd = accept(sock_fd, NULL, 0)) == -1)
-		EDIE("accept");
-	ssize_t len = recv(cli_fd, sockbuf, sizeof sockbuf - 1, 0);
-	if (len == -1)
-		EDIE("recv");
-	close(cli_fd);
-	if (len == 0)
-		return;
-	sockbuf[len] = '\0';
+    int cli_fd;
+    if ((cli_fd = accept(sock_fd, NULL, 0)) == -1)
+        EDIE("accept");
+    ssize_t len = recv(cli_fd, sockbuf, sizeof sockbuf - 1, 0);
+    if (len == -1)
+        EDIE("recv");
+    close(cli_fd);
+    if (len == 0)
+        return;
+    sockbuf[len] = '\0';
 
-	char *wordbeg, *wordend;
-	wordend = (char *)&sockbuf;
+    char *wordbeg, *wordend;
+    wordend = (char *)&sockbuf;
 
-	ADVANCE_IF_LAST_RET();
-		
-	Bar *bar = NULL, *it;
-	bool all = false;
-		
-	if (!strcmp(wordbeg, "all")) {
-		all = true;
-	} else if (!strcmp(wordbeg, "selected")) {
-		wl_list_for_each(it, &bar_list, link) {
-			if (it->sel) {
-				bar = it;
-				break;
-			}
-		}
-	} else {
-		wl_list_for_each(it, &bar_list, link) {
-			if (it->xdg_output_name && !strcmp(wordbeg, it->xdg_output_name)) {
-				bar = it;
-				break;
-			}
-		}
-	}
-		
-	if (!all && !bar)
-		return;
-	
-	ADVANCE();
+    ADVANCE_IF_LAST_RET();
 
-	if (!strcmp(wordbeg, "status")) {
-		if (!*wordend)
-			return;
-		if (all) {
-			Bar *first = NULL;
-			wl_list_for_each(bar, &bar_list, link) {
-				if (first) {
-					copy_customtext(&first->status, &bar->status);
-				} else {
-					parse_into_customtext(&bar->status, wordend);
-					first = bar;
-				}
-				bar->redraw = true;
-			}
-		} else {
-			parse_into_customtext(&bar->status, wordend);
-			bar->redraw = true;
-		}
-	} else if (!strcmp(wordbeg, "title")) {
-		if (!custom_title || !*wordend)
-			return;
-		if (all) {
-			Bar *first = NULL;
-			wl_list_for_each(bar, &bar_list, link) {
-				if (first) {
-					copy_customtext(&first->title, &bar->title);
-				} else {
-					parse_into_customtext(&bar->title, wordend);
-					first = bar;
-				}
-				bar->redraw = true;
-			}
-		} else {
-			parse_into_customtext(&bar->title, wordend);
-			bar->redraw = true;
-		}
-	} else if (!strcmp(wordbeg, "show")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (bar->hidden)
-					show_bar(bar);
-		} else {
-			if (bar->hidden)
-				show_bar(bar);
-		}
-	} else if (!strcmp(wordbeg, "hide")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (!bar->hidden)
-					hide_bar(bar);
-		} else {
-			if (!bar->hidden)
-				hide_bar(bar);
-		}
-	} else if (!strcmp(wordbeg, "toggle-visibility")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (bar->hidden)
-					show_bar(bar);
-				else
-					hide_bar(bar);
-		} else {
-			if (bar->hidden)
-				show_bar(bar);
-			else
-				hide_bar(bar);
-		}
-	} else if (!strcmp(wordbeg, "set-top")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (bar->bottom)
-					set_top(bar);
-						
-		} else {
-			if (bar->bottom)
-				set_top(bar);
-		}
-	} else if (!strcmp(wordbeg, "set-bottom")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (!bar->bottom)
-					set_bottom(bar);
-						
-		} else {
-			if (!bar->bottom)
-				set_bottom(bar);
-		}
-	} else if (!strcmp(wordbeg, "toggle-location")) {
-		if (all) {
-			wl_list_for_each(bar, &bar_list, link)
-				if (bar->bottom)
-					set_top(bar);
-				else
-					set_bottom(bar);
-		} else {
-			if (bar->bottom)
-				set_top(bar);
-			else
-				set_bottom(bar);
-		}
-	}
+    char *cmd = wordbeg;
+
+    ADVANCE_IF_LAST_RET();
+
+    Bar *bar = NULL, *it;
+    bool all = false;
+
+    if (!strcmp(wordbeg, "all")) {
+        all = true;
+    } else if (!strcmp(wordbeg, "selected")) {
+        wl_list_for_each(it, &bar_list, link) {
+            if (it->sel) {
+                bar = it;
+                break;
+            }
+        }
+    } else {
+        wl_list_for_each(it, &bar_list, link) {
+            if (it->xdg_output_name && !strcmp(wordbeg, it->xdg_output_name)) {
+                bar = it;
+                break;
+            }
+        }
+    }
+
+    if (!all && !bar)
+        return;
+
+    ADVANCE(); 
+
+    if (!strcmp(cmd, "status")) {
+        if (!*wordend)
+            return;
+        if (all) {
+            Bar *first = NULL;
+            wl_list_for_each(bar, &bar_list, link) {
+                if (first) {
+                    copy_customtext(&first->status, &bar->status);
+                } else {
+                    parse_into_customtext(&bar->status, wordend);
+                    first = bar;
+                }
+                bar->redraw = true;
+            }
+        } else {
+            parse_into_customtext(&bar->status, wordend);
+            bar->redraw = true;
+        }
+    } else if (!strcmp(cmd, "title")) {
+        if (!custom_title || !*wordend)
+            return;
+        if (all) {
+            Bar *first = NULL;
+            wl_list_for_each(bar, &bar_list, link) {
+                if (first) {
+                    copy_customtext(&first->title, &bar->title);
+                } else {
+                    parse_into_customtext(&bar->title, wordend);
+                    first = bar;
+                }
+                bar->redraw = true;
+            }
+        } else {
+            parse_into_customtext(&bar->title, wordend);
+            bar->redraw = true;
+        }
+    } else if (!strcmp(cmd, "show")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (bar->hidden)
+                    show_bar(bar);
+        } else {
+            if (bar->hidden)
+                show_bar(bar);
+        }
+    } else if (!strcmp(cmd, "hide")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (!bar->hidden)
+                    hide_bar(bar);
+        } else {
+            if (!bar->hidden)
+                hide_bar(bar);
+        }
+    } else if (!strcmp(cmd, "toggle-visibility")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (bar->hidden)
+                    show_bar(bar);
+                else
+                    hide_bar(bar);
+        } else {
+            if (bar->hidden)
+                show_bar(bar);
+            else
+                hide_bar(bar);
+        }
+    } else if (!strcmp(cmd, "set-top")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (bar->bottom)
+                    set_top(bar);
+        } else {
+            if (bar->bottom)
+                set_top(bar);
+        }
+    } else if (!strcmp(cmd, "set-bottom")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (!bar->bottom)
+                    set_bottom(bar);
+        } else {
+            if (!bar->bottom)
+                set_bottom(bar);
+        }
+    } else if (!strcmp(cmd, "toggle-location")) {
+        if (all) {
+            wl_list_for_each(bar, &bar_list, link)
+                if (bar->bottom)
+                    set_top(bar);
+                else
+                    set_bottom(bar);
+        } else {
+            if (bar->bottom)
+                set_top(bar);
+            else
+                set_bottom(bar);
+        }
+    }
 }
 
 static void
