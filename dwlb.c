@@ -1899,7 +1899,7 @@ main(int argc, char **argv)
 	fcft_init(FCFT_LOG_COLORIZE_AUTO, 0, FCFT_LOG_CLASS_ERROR);
 	fcft_set_scaling_filter(FCFT_SCALING_FILTER_LANCZOS3);
 
-	unsigned int dpi = 96 * buffer_scale;
+	unsigned int dpi = dpi_set * buffer_scale;
 	char buf[10];
 	snprintf(buf, sizeof buf, "dpi=%u", dpi);
 	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, buf)))

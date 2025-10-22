@@ -24,6 +24,8 @@ static bool custom_title = false;
 static bool active_color_title = true;
 // scale
 static uint32_t buffer_scale = 1;
+// set dpi
+static uint32_t dpi_set = 96;
 // font
 static char *fontstr = "monospace:size=16";
 // tag names
