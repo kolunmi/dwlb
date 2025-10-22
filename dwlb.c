@@ -1904,7 +1904,7 @@ main(int argc, char **argv)
 	snprintf(buf, sizeof buf, "dpi=%u", dpi);
 	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, buf)))
 		DIE("Could not load font");
-	textpadding = font->height / 2;
+	textpadding = (font->height + horizontal_padding) / 2;
 	height = font->height / buffer_scale + vertical_padding * 2;
 
 	/* Configure tag names */

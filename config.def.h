@@ -14,6 +14,8 @@ static bool bottom = false;
 static bool hide_vacant = false;
 // vertical pixel padding above and below text
 static uint32_t vertical_padding = 1;
+// horizontal pixel padding of the left and right of each character
+static uint32_t horizontal_padding = 0;
 // allow in-line color commands in status text
 static bool status_commands = true;
 // center title text
