@@ -27,6 +27,17 @@ Pass `dwlb` as an argument to dwl's `-s` flag. This will populate each connected
 dwl -s 'dwlb -font "monospace:size=16"'
 ```
 
+Or create a wrapper script, which allows to restart dwlb `kill -15 "$(pidof dwlb)"` without having to restart dwl:
+```
+#!/bin/sh
+while :; do
+	dwlb
+	sleep 1
+done
+```
+don't forget to make it executable `chmod +x /path/to/dwlb_wrapper.sh` and launch dwl with:
+`dwl -s '/path/to/dwlb_wrapper.sh'`
+
 ## Ipc
 If dwl is [patched](https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/ipc) appropriately, dwlb is capable of communicating directly with dwl. When ipc is enabled with `-ipc`, dwlb does not read from stdin, and clicking tags functions as you would expect. Ipc can be disabled with `-no-ipc`.
 
