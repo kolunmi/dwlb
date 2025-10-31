@@ -111,6 +111,8 @@
 	"	-set-top [OUTPUT]		draw bar at the top\n"	\
 	"	-set-bottom [OUTPUT]		draw bar at the bottom\n" \
 	"	-toggle-location [OUTPUT]	toggle bar location\n"	\
+	"	-printfocused [OUTPUT]		print the title of focused window\n"	\
+	"	-printtags [OUTPUT]		print the decimal representation of occupied tags\n"	\
 	"Other\n"							\
 	"	-v				get version information\n" \
 	"	-h				view this help text\n"
@@ -1451,11 +1453,14 @@ read_socket(void)
 	if ((cli_fd = accept(sock_fd, NULL, 0)) == -1)
 		EDIE("accept");
 	ssize_t len = recv(cli_fd, sockbuf, sizeof sockbuf - 1, 0);
-	if (len == -1)
+	if (len == -1) {
+		close(cli_fd);
 		EDIE("recv");
-	close(cli_fd);
-	if (len == 0)
+	}
+	if (len == 0) {
+		close(cli_fd);
 		return;
+	}
 	sockbuf[len] = '\0';
 
 	char *wordbeg, *wordend;
@@ -1485,6 +1490,7 @@ read_socket(void)
 	}
 		
 	if (!all && !bar)
+		close(cli_fd);
 		return;
 	
 	ADVANCE();
@@ -1543,6 +1549,17 @@ read_socket(void)
 			if (!bar->hidden)
 				hide_bar(bar);
 		}
+	} else if (!strcmp(wordbeg, "printfocused")) {
+		const char *info = (bar->window_title && bar->window_title[0] != '\0') ? bar->window_title : "(none)";
+		if (send(cli_fd, info, strlen(info), 0) == -1) {
+			perror("send");
+		}
+	} else if (!strcmp(wordbeg, "printtags")) {
+		char tag_str[12];
+		snprintf(tag_str, sizeof(tag_str), "%u", bar->ctags);
+		if (send(cli_fd, tag_str, strlen(tag_str), 0) == -1) {
+			perror("send");
+		}
 	} else if (!strcmp(wordbeg, "toggle-visibility")) {
 		if (all) {
 			wl_list_for_each(bar, &bar_list, link)
@@ -1589,6 +1606,7 @@ read_socket(void)
 			else
 				set_bottom(bar);
 		}
+	close(cli_fd);
 	}
 }
 
@@ -1737,6 +1755,48 @@ main(int argc, char **argv)
 			if (++i >= argc)
 				DIE("Option -hide requires an argument");
 			client_send_command(&sock_address, argv[i], "hide", NULL, target_socket);
+			return 0;
+		} else if (!strcmp(argv[i], "-printfocused")) {
+			if (++i >= argc)
+				DIE("Option -printfocused requires an argument");
+			int sockfd;
+			if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+				EDIE("socket");
+			snprintf(sock_address.sun_path, sizeof(sock_address.sun_path), "%s/%s", socketdir, target_socket ? target_socket : "dwlb-0");
+			if (connect(sockfd, (struct sockaddr *)&sock_address, sizeof(sock_address)) == -1)
+				EDIE("connect");
+			char cmd[256];
+			snprintf(cmd, sizeof(cmd), "%s printfocused", argv[i]);
+			if (send(sockfd, cmd, strlen(cmd), 0) == -1)
+				EDIE("send");
+			char buf[1024];
+			ssize_t len = recv(sockfd, buf, sizeof(buf) - 1, 0);
+			if (len > 0) {
+				buf[len] = '\0';
+				printf("%s\n", buf);
+			}
+			close(sockfd);
+			return 0;
+		} else if (!strcmp(argv[i], "-printtags")) {
+			if (++i >= argc)
+				DIE("Option -printtags requires an argument");
+			int sockfd;
+			if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+				EDIE("socket");
+			snprintf(sock_address.sun_path, sizeof(sock_address.sun_path), "%s/%s", socketdir, target_socket ? target_socket : "dwlb-0");
+			if (connect(sockfd, (struct sockaddr *)&sock_address, sizeof(sock_address)) == -1)
+				EDIE("connect");
+			char cmd[256];
+			snprintf(cmd, sizeof(cmd), "%s printtags", argv[i]);
+			if (send(sockfd, cmd, strlen(cmd), 0) == -1)
+				EDIE("send");
+			char buf[1024];
+			ssize_t len = recv(sockfd, buf, sizeof(buf) - 1, 0);
+			if (len > 0) {
+				buf[len] = '\0';
+				printf("%s\n", buf);
+			}
+			close(sockfd);
 			return 0;
 		} else if (!strcmp(argv[i], "-toggle-visibility")) {
 			if (++i >= argc)
