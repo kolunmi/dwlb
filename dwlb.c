@@ -161,6 +161,7 @@ typedef struct {
 	CustomText title, status;
 
 	bool hidden, bottom;
+	bool floating;
 	bool redraw;
 
 	struct wl_list link;
@@ -469,7 +470,14 @@ draw_frame(Bar *bar)
 				});
 	x = nx;
 	
-	x = draw_text(custom_title ? bar->title.text : bar->window_title,
+	char *title_text = custom_title ? bar->title.text : bar->window_title;
+	char floating_title[TEXT_MAX];
+	if (bar->floating) {
+		snprintf(floating_title, sizeof(floating_title), "** %s **", title_text);
+		title_text = floating_title;
+	}
+
+	x = draw_text(title_text,
 		      x, y, foreground, foreground_mask, background,
 		      (bar->sel && active_color_title) ? &active_fg_color : &inactive_fg_color,
 		      (bar->sel && active_color_title) ? &active_bg_color : &inactive_bg_color,
@@ -985,6 +993,12 @@ static void
 dwl_wm_output_floating(void *data, struct zdwl_ipc_output_v2 *dwl_wm_output,
 	uint32_t is_floating)
 {
+	Bar *bar = (Bar *)data;
+
+	if ((is_floating != 0) != bar->floating) {
+		bar->floating = (is_floating != 0);
+		bar->redraw = true;
+	}
 }
 
 static const struct zdwl_ipc_output_v2_listener dwl_wm_output_listener = {
@@ -1007,6 +1021,7 @@ setup_bar(Bar *bar)
 	bar->textpadding = textpadding;
 	bar->bottom = bottom;
 	bar->hidden = hidden;
+	bar->floating = false;
 
 	bar->xdg_output = zxdg_output_manager_v1_get_xdg_output(output_manager, bar->wl_output);
 	if (!bar->xdg_output)
