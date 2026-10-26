@@ -1897,12 +1897,17 @@ main(int argc, char **argv)
 
 	/* Load selected font */
 	fcft_init(FCFT_LOG_COLORIZE_AUTO, 0, FCFT_LOG_CLASS_ERROR);
-	fcft_set_scaling_filter(FCFT_SCALING_FILTER_LANCZOS3);
+	struct fcft_font_options *font_options = fcft_font_options_create();
+	if (!font_options)
+		DIE("Could not load font options");
+	font_options->scaling_filter = FCFT_SCALING_FILTER_LANCZOS3;
 
 	unsigned int dpi = 96 * buffer_scale;
 	char buf[10];
 	snprintf(buf, sizeof buf, "dpi=%u", dpi);
-	if (!(font = fcft_from_name(1, (const char *[]) {fontstr}, buf)))
+	font = fcft_from_name2(1, (const char *[]) {fontstr}, buf, font_options);
+	fcft_font_options_destroy(font_options);
+	if (!font)
 		DIE("Could not load font");
 	textpadding = font->height / 2;
 	height = font->height / buffer_scale + vertical_padding * 2;
